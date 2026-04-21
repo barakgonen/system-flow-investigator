@@ -13,6 +13,8 @@ import java.util.UUID;
 public class ProducerMain {
 
     private static final String TOPIC = "lab/flow/in";
+    private static final String OTHER_TOPIC = "lab/flow/other";
+    private static final String UNRELATED_TOPIC = "bg/ata/melech";
 
     public static void main(String[] args) throws Exception {
         String host = getenv("MQTT_HOST", "localhost");
@@ -39,7 +41,12 @@ public class ProducerMain {
 
             byte[] bytes = mapper.writeValueAsString(payload).getBytes(StandardCharsets.UTF_8);
             client.publish(TOPIC, new MqttMessage(bytes));
+            client.publish(OTHER_TOPIC, new MqttMessage(bytes)); // publish to a topic that doesn't match the subscription filter
 
+            if (sequence % 50 == 0) {
+                client.publish(UNRELATED_TOPIC, new MqttMessage(bytes)); // publish to an unrelated topic that doesn't match the subscription filter
+                System.out.println("published topic=" + UNRELATED_TOPIC + " seq=" + sequence);
+            }
             System.out.println("published topic=" + TOPIC + " seq=" + sequence);
             Thread.sleep(1000);
         }

@@ -52,7 +52,7 @@ public class RealMqttObserver implements MqttObserver {
                             @Value("${mqtt.host:localhost}") String defaultHost,
                             @Value("${mqtt.port:1883}") int defaultPort,
                             @Value("${mqtt.client-id-prefix:system-flow-investigator}") String defaultClientIdPrefix,
-                            @Value("${mqtt.topic-filter:lab/flow/#}") String initialTopicFilter,
+                            @Value("${mqtt.topic-filter:#}") String initialTopicFilter,
                             @Value("${mqtt.persist-by-default:false}") boolean persistByDefault) {
         this.eventHub = eventHub;
         this.recentEventStore = recentEventStore;
@@ -72,14 +72,14 @@ public class RealMqttObserver implements MqttObserver {
     @PostConstruct
     public void start() {
         connect(new ConnectMqttRequest(
-                "default",
+                "flow-debugger",
                 defaultHost,
                 defaultPort,
                 defaultClientIdPrefix,
                 null,
                 null
         ));
-        subscribe(new SubscribeMqttRequest("default", initialTopicFilter, persistByDefault));
+        subscribe(new SubscribeMqttRequest("flow-debugger", initialTopicFilter, persistByDefault));
     }
 
     @Override
@@ -102,7 +102,7 @@ public class RealMqttObserver implements MqttObserver {
 
         try {
             String brokerUrl = "tcp://" + activeHost + ":" + activePort;
-            String clientId = activeClientIdPrefix + "-" + UUID.randomUUID();
+            String clientId = "flow-debugger";//activeClientIdPrefix + "-" + UUID.randomUUID();
             client = new MqttClient(brokerUrl, clientId);
 
             client.setCallback(new MqttCallback() {
