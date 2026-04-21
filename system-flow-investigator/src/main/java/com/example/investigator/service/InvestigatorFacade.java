@@ -6,13 +6,14 @@ import com.example.investigator.domain.DashboardSummary;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeMqttRequest;
 import com.example.investigator.domain.SubscribeWebSocketRequest;
-import com.example.investigator.mqtt.MqttObserver;
+import com.example.investigator.ingestion.mqtt.MqttObserver;
+import com.example.investigator.ingestion.websocket.WebSocketObserver;
 import com.example.investigator.storage.RecentEventStore;
 import com.example.investigator.stream.EventHub;
-import com.example.investigator.websocket.WebSocketObserver;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -55,12 +56,19 @@ public class InvestigatorFacade {
                 .toList();
     }
 
-    public Set<String> observedTopics() {
-        return mqttObserver.observedTopics();
+    public Set<String> observedMqttChannels() {
+        return mqttObserver.observedChannels();
     }
 
     public Set<String> observedWebSocketChannels() {
         return webSocketObserver.observedChannels();
+    }
+
+    public Set<String> observedAllChannels() {
+        Set<String> result = new LinkedHashSet<>();
+        result.addAll(mqttObserver.observedChannels());
+        result.addAll(webSocketObserver.observedChannels());
+        return result;
     }
 
     public void connectMqtt(ConnectMqttRequest request) {
@@ -81,7 +89,7 @@ public class InvestigatorFacade {
 
     public DashboardSummary getDashboardSummary() {
         List<ObservedEvent> recentEvents = recentEventStore.getAllRecent();
-        Set<String> topics = mqttObserver.observedTopics();
+        Set<String> mqttChannels = mqttObserver.observedChannels();
         Set<String> wsChannels = webSocketObserver.observedChannels();
 
         List<String> latestTopics = recentEvents.stream()
@@ -102,7 +110,7 @@ public class InvestigatorFacade {
 
         return new DashboardSummary(
                 mqttConnected,
-                topics.size(),
+                mqttChannels.size(),
                 wsChannels.size(),
                 recentEvents.size(),
                 latestTopics,

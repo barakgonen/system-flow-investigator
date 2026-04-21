@@ -1,12 +1,11 @@
-package com.example.investigator.mqtt;
+package com.example.investigator.ingestion.mqtt;
 
 import com.example.investigator.domain.ConnectMqttRequest;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeMqttRequest;
+import com.example.investigator.ingestion.AbstractIngestionSource;
+import com.example.investigator.ingestion.ObservedEventPipeline;
 import com.example.investigator.service.TraceIdExtractor;
-import com.example.investigator.storage.MessageFileSink;
-import com.example.investigator.storage.RecentEventStore;
-import com.example.investigator.stream.EventHub;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.eclipse.paho.client.mqttv3.*;
@@ -17,21 +16,15 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Primary
-public class RealMqttObserver implements MqttObserver {
+public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest, SubscribeMqttRequest>
+        implements MqttObserver {
 
-    private final EventHub eventHub;
-    private final RecentEventStore recentEventStore;
-    private final MessageFileSink messageFileSink;
+    private final ObservedEventPipeline pipeline;
     private final TraceIdExtractor traceIdExtractor;
-
-    private final Set<String> observedTopics = ConcurrentHashMap.newKeySet();
-    private final Map<String, Boolean> persistByTopicFilter = new ConcurrentHashMap<>();
 
     private final String defaultHost;
     private final int defaultPort;
@@ -45,18 +38,14 @@ public class RealMqttObserver implements MqttObserver {
 
     private volatile MqttClient client;
 
-    public RealMqttObserver(EventHub eventHub,
-                            RecentEventStore recentEventStore,
-                            MessageFileSink messageFileSink,
+    public RealMqttObserver(ObservedEventPipeline pipeline,
                             TraceIdExtractor traceIdExtractor,
                             @Value("${mqtt.host:localhost}") String defaultHost,
                             @Value("${mqtt.port:1883}") int defaultPort,
                             @Value("${mqtt.client-id-prefix:system-flow-investigator}") String defaultClientIdPrefix,
                             @Value("${mqtt.topic-filter:#}") String initialTopicFilter,
                             @Value("${mqtt.persist-by-default:false}") boolean persistByDefault) {
-        this.eventHub = eventHub;
-        this.recentEventStore = recentEventStore;
-        this.messageFileSink = messageFileSink;
+        this.pipeline = pipeline;
         this.traceIdExtractor = traceIdExtractor;
         this.defaultHost = defaultHost;
         this.defaultPort = defaultPort;
@@ -69,16 +58,14 @@ public class RealMqttObserver implements MqttObserver {
         this.activeClientIdPrefix = defaultClientIdPrefix;
     }
 
+    @Override
+    public String sourceType() {
+        return "MQTT";
+    }
+
     @PostConstruct
     public void start() {
-        connect(new ConnectMqttRequest(
-                "flow-debugger",
-                defaultHost,
-                defaultPort,
-                defaultClientIdPrefix,
-                null,
-                null
-        ));
+        connect(new ConnectMqttRequest("flow-debugger", defaultHost, defaultPort, defaultClientIdPrefix, null, null));
         subscribe(new SubscribeMqttRequest("flow-debugger", initialTopicFilter, persistByDefault));
     }
 
@@ -86,13 +73,13 @@ public class RealMqttObserver implements MqttObserver {
     public synchronized void connect(ConnectMqttRequest request) {
         if (request != null) {
             if (request.host() != null && !request.host().isBlank()) {
-                this.activeHost = request.host();
+                activeHost = request.host();
             }
             if (request.port() > 0) {
-                this.activePort = request.port();
+                activePort = request.port();
             }
             if (request.clientId() != null && !request.clientId().isBlank()) {
-                this.activeClientIdPrefix = request.clientId();
+                activeClientIdPrefix = request.clientId();
             }
         }
 
@@ -102,14 +89,12 @@ public class RealMqttObserver implements MqttObserver {
 
         try {
             String brokerUrl = "tcp://" + activeHost + ":" + activePort;
-            String clientId = "flow-debugger";//activeClientIdPrefix + "-" + UUID.randomUUID();
-            client = new MqttClient(brokerUrl, clientId);
+            client = new MqttClient(brokerUrl, activeClientIdPrefix);// + "-" + UUID.randomUUID());
 
             client.setCallback(new MqttCallback() {
                 @Override
                 public void connectionLost(Throwable cause) {
-                    System.err.println("Investigator MQTT connection lost: " +
-                            (cause == null ? "unknown" : cause.getMessage()));
+                    System.err.println("MQTT connection lost: " + (cause == null ? "unknown" : cause.getMessage()));
                 }
 
                 @Override
@@ -136,9 +121,9 @@ public class RealMqttObserver implements MqttObserver {
             }
 
             client.connect(options);
-            System.out.println("Investigator connected to " + brokerUrl);
+            System.out.println("MQTT connected to " + brokerUrl);
         } catch (MqttException e) {
-            throw new IllegalStateException("Failed to connect investigator to MQTT broker", e);
+            throw new IllegalStateException("Failed to connect MQTT", e);
         }
     }
 
@@ -148,22 +133,16 @@ public class RealMqttObserver implements MqttObserver {
 
         try {
             client.subscribe(request.topicFilter(), 1);
-            persistByTopicFilter.put(request.topicFilter(), request.persistToFile());
-            System.out.println("Investigator subscribed to " + request.topicFilter() +
-                    " (persist=" + request.persistToFile() + ")");
+            registerPersistence(request.topicFilter(), request.persistToFile());
+            System.out.println("MQTT subscribed to " + request.topicFilter());
         } catch (MqttException e) {
-            throw new IllegalStateException("Failed subscribing to topic filter " + request.topicFilter(), e);
+            throw new IllegalStateException("Failed subscribing MQTT to " + request.topicFilter(), e);
         }
-    }
-
-    @Override
-    public Set<String> observedTopics() {
-        return observedTopics;
     }
 
     private void handleIncomingMessage(String topic, MqttMessage message) {
         String payload = new String(message.getPayload(), StandardCharsets.UTF_8);
-        observedTopics.add(topic);
+        markObserved(topic);
 
         ObservedEvent event = new ObservedEvent(
                 "MQTT",
@@ -178,40 +157,7 @@ public class RealMqttObserver implements MqttObserver {
                 traceIdExtractor.extract(payload)
         );
 
-        recentEventStore.add(event);
-        eventHub.publish(event);
-
-        if (shouldPersist(topic)) {
-            messageFileSink.append(event);
-        }
-    }
-
-    private boolean shouldPersist(String topic) {
-        if (persistByDefault) {
-            return true;
-        }
-        return persistByTopicFilter.entrySet().stream()
-                .anyMatch(entry -> entry.getValue() && matches(entry.getKey(), topic));
-    }
-
-    private boolean matches(String filter, String topic) {
-        String[] filterParts = filter.split("/");
-        String[] topicParts = topic.split("/");
-
-        int i = 0;
-        for (; i < filterParts.length; i++) {
-            String part = filterParts[i];
-            if ("#".equals(part)) {
-                return true;
-            }
-            if (i >= topicParts.length) {
-                return false;
-            }
-            if (!"+".equals(part) && !part.equals(topicParts[i])) {
-                return false;
-            }
-        }
-        return i == topicParts.length;
+        pipeline.accept(event, shouldPersist(topic));
     }
 
     @PreDestroy
@@ -220,7 +166,7 @@ public class RealMqttObserver implements MqttObserver {
             try {
                 client.disconnect();
                 client.close();
-            } catch (MqttException ignored) {
+            } catch (Exception ignored) {
             }
         }
     }

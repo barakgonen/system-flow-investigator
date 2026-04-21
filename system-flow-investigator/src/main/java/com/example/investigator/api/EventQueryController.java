@@ -38,7 +38,7 @@ public class EventQueryController {
 
     @GetMapping("/mqtt/topics")
     public Set<String> mqttTopics() {
-        return facade.observedTopics();
+        return facade.observedMqttChannels();
     }
 
     @GetMapping("/ws/channels")
