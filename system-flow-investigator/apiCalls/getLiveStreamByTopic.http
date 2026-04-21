@@ -1,0 +1,2 @@
+GET http://localhost:8080/api/stream/events?channelContains=lab/flow/in
+Accept: text/event-stream

@@ -46,15 +46,15 @@ services:
       MQTT_PORT: 1883
       IN_TOPIC: lab/flow/out
 
-  system-flow-investigator:
-    build:
-      context: .
-      dockerfile: system-flow-investigator/Dockerfile
-    container_name: system-flow-investigator
-    restart: always
-    depends_on:
-      - emqx
-    environment:
-      MQTT_HOST: emqx
-      MQTT_PORT: 1883
-      MQTT_TOPIC_FILTER: lab/flow/#
+#  system-flow-investigator:
+#    build:
+#      context: .
+#      dockerfile: system-flow-investigator/Dockerfile
+#    container_name: system-flow-investigator
+#    restart: always
+#    depends_on:
+#      - emqx
+#    environment:
+#      MQTT_HOST: emqx
+#      MQTT_PORT: 1883
+#      MQTT_TOPIC_FILTER: lab/flow/#

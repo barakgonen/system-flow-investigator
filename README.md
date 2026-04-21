@@ -41,3 +41,22 @@ DROP_EVERY_N: 10
 ```
 
 Then every 10th message will be dropped before publishing to `lab/flow/out`.
+
+
+## Investigator phase 1
+
+After `docker compose up --build`, the investigator auto-connects to EMQX and subscribes to `lab/flow/#`.
+
+Useful endpoints:
+
+- `GET http://localhost:8080/api/events/mqtt/topics`
+- `GET http://localhost:8080/api/events/recent`
+- `GET http://localhost:8080/api/events/recent?channel=lab/flow/in`
+- `GET http://localhost:8080/api/stream/events`
+- `POST http://localhost:8080/api/control/mqtt/subscribe`
+
+Example subscribe body:
+
+```json
+{"topicFilter":"lab/flow/out","persistToFile":false}
+```
