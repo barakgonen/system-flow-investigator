@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Flow Investigator</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-badge">SF</div>
+            <div>
+                <h1>System Flow</h1>
+                <p>Investigator</p>
+            </div>
+        </div>
+
+        <section class="panel">
+            <div class="panel-header">
+                <h2>Topics</h2>
+                <button id="refreshTopicsBtn">Refresh</button>
+            </div>
+            <div id="topicsList" class="topics-list"></div>
+        </section>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar">
+            <div>
+                <h2>Live MQTT Monitor</h2>
+                <p>Thin UI. Backend-driven logic.</p>
+            </div>
+
+            <div class="filters">
+                <input id="channelFilter" type="text" placeholder="Filter by channel">
+                <input id="textFilter" type="text" placeholder="Filter payload text">
+                <button id="connectStreamBtn">Connect Stream</button>
+                <button id="disconnectStreamBtn">Disconnect</button>
+            </div>
+        </header>
+
+        <section class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">Observed Topics</span>
+                <strong id="topicsCount">0</strong>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Captured Events</span>
+                <strong id="eventsCount">0</strong>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Selected Topic</span>
+                <strong id="selectedTopicLabel">All</strong>
+            </div>
+        </section>
+
+        <section class="content-grid">
+            <section class="panel table-panel">
+                <div class="panel-header">
+                    <h2>Live Events</h2>
+                    <button id="loadRecentBtn">Load Recent</button>
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Protocol</th>
+                            <th>Channel</th>
+                            <th>Trace ID</th>
+                            <th>Payload</th>
+                        </tr>
+                        </thead>
+                        <tbody id="eventsTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="panel details-panel">
+                <div class="panel-header">
+                    <h2>Event Details</h2>
+                </div>
+                <pre id="eventDetails">Select an event to inspect details.</pre>
+            </section>
+        </section>
+    </main>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

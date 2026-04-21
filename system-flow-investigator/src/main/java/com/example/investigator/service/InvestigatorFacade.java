@@ -2,6 +2,7 @@ package com.example.investigator.service;
 
 import com.example.investigator.domain.ConnectMqttRequest;
 import com.example.investigator.domain.ConnectWebSocketRequest;
+import com.example.investigator.domain.DashboardSummary;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeMqttRequest;
 import com.example.investigator.domain.SubscribeWebSocketRequest;
@@ -66,5 +67,36 @@ public class InvestigatorFacade {
 
     public void subscribeWebSocket(SubscribeWebSocketRequest request) {
         webSocketObserver.subscribe(request);
+    }
+
+    public DashboardSummary getDashboardSummary() {
+        List<ObservedEvent> recentEvents = recentEventStore.getAllRecent();
+        Set<String> topics = mqttObserver.observedTopics();
+        Set<String> wsChannels = webSocketObserver.observedChannels();
+
+        List<String> latestTopics = recentEvents.stream()
+                .map(ObservedEvent::channel)
+                .filter(channel -> channel != null && !channel.isBlank())
+                .distinct()
+                .limit(10)
+                .toList();
+
+        List<String> latestTraceIds = recentEvents.stream()
+                .map(ObservedEvent::traceId)
+                .filter(traceId -> traceId != null && !traceId.isBlank())
+                .distinct()
+                .limit(10)
+                .toList();
+
+        boolean mqttConnected = true; // phase 1 simple assumption; improve in phase 2
+
+        return new DashboardSummary(
+                mqttConnected,
+                topics.size(),
+                wsChannels.size(),
+                recentEvents.size(),
+                latestTopics,
+                latestTraceIds
+        );
     }
 }
