@@ -1,0 +1,10 @@
+server:
+  port: 8090
+
+mqtt:
+  host: ${MQTT_HOST:localhost}
+  port: ${MQTT_PORT:1883}
+  in-topic: ${IN_TOPIC:lab/flow/out}
+
+app:
+  ws-channel: ${WS_CHANNEL:ws/live/out}

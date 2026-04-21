@@ -1,9 +1,11 @@
-const topicsList = document.getElementById('topicsList');
+const mqttTopicsList = document.getElementById('mqttTopicsList');
+const wsChannelsList = document.getElementById('wsChannelsList');
 const topicsCount = document.getElementById('topicsCount');
 const eventsCount = document.getElementById('eventsCount');
 const selectedTopicLabel = document.getElementById('selectedTopicLabel');
 const eventsTableBody = document.getElementById('eventsTableBody');
 const eventDetails = document.getElementById('eventDetails');
+const streamStatus = document.getElementById('streamStatus');
 
 const refreshTopicsBtn = document.getElementById('refreshTopicsBtn');
 const loadRecentBtn = document.getElementById('loadRecentBtn');
@@ -13,10 +15,12 @@ const disconnectStreamBtn = document.getElementById('disconnectStreamBtn');
 const channelFilterInput = document.getElementById('channelFilter');
 const textFilterInput = document.getElementById('textFilter');
 
-let selectedTopic = null;
+let selectedChannel = null;
+let selectedChannelType = null;
 let eventSource = null;
-let cachedTopics = [];
 let cachedEvents = [];
+let cachedMqttTopics = [];
+let streamConnected = false;
 
 async function fetchJson(url) {
     const response = await fetch(url);
@@ -26,11 +30,29 @@ async function fetchJson(url) {
     return response.json();
 }
 
+function setStreamStatus(state) {
+    streamStatus.className = `status-badge ${state}`;
+
+    if (state === 'connected') {
+        streamStatus.textContent = 'Connected';
+    } else if (state === 'connecting') {
+        streamStatus.textContent = 'Connecting';
+    } else {
+        streamStatus.textContent = 'Disconnected';
+    }
+
+    connectStreamBtn.disabled = state === 'connecting' || state === 'connected';
+    disconnectStreamBtn.disabled = state === 'disconnected';
+    streamConnected = state === 'connected' || state === 'connecting';
+}
+
 function buildRecentUrl() {
     const params = new URLSearchParams();
-    if (selectedTopic) {
-        params.set('channel', selectedTopic);
+
+    if (selectedChannel) {
+        params.set('channel', selectedChannel);
     }
+
     const query = params.toString();
     return `/api/events/recent${query ? `?${query}` : ''}`;
 }
@@ -38,50 +60,69 @@ function buildRecentUrl() {
 function buildStreamUrl() {
     const params = new URLSearchParams();
 
-    const channelFilter = channelFilterInput.value.trim();
+    const manualChannelFilter = channelFilterInput.value.trim();
     const textFilter = textFilterInput.value.trim();
 
-    if (channelFilter) {
-        params.set('channelContains', channelFilter);
-    } else if (selectedTopic) {
-        params.set('channelContains', selectedTopic);
+    if (manualChannelFilter) {
+        params.set('channelContains', manualChannelFilter);
+    } else if (selectedChannel) {
+        params.set('channelContains', selectedChannel);
     }
 
     if (textFilter) {
         params.set('textContains', textFilter);
     }
 
-    const query = params.toString();
-    return `/api/stream/events${query ? `?${query}` : ''}`;
+    params.set('_ts', String(Date.now()));
+
+    return `/api/stream/events?${params.toString()}`;
 }
 
-function renderTopics(topics) {
-    cachedTopics = topics;
-    topicsList.innerHTML = '';
+function renderMqttTopics(topics) {
+    cachedMqttTopics = topics;
+    mqttTopicsList.innerHTML = '';
 
     const allBtn = document.createElement('button');
-    allBtn.className = `topic-chip ${selectedTopic === null ? 'active' : ''}`;
+    allBtn.className = `topic-chip ${selectedChannel === null ? 'active' : ''}`;
     allBtn.textContent = 'All topics';
     allBtn.onclick = async () => {
-        selectedTopic = null;
+        selectedChannel = null;
+        selectedChannelType = null;
         selectedTopicLabel.textContent = 'All';
-        renderTopics(cachedTopics);
+        renderMqttTopics(cachedMqttTopics);
         await loadRecent();
+        if (streamConnected) {
+            reconnectStream();
+        }
     };
-    topicsList.appendChild(allBtn);
+    mqttTopicsList.appendChild(allBtn);
 
     for (const topic of topics) {
         const btn = document.createElement('button');
-        btn.className = `topic-chip ${selectedTopic === topic ? 'active' : ''}`;
+        btn.className = `topic-chip ${(selectedChannel === topic && selectedChannelType === 'MQTT') ? 'active' : ''}`;
         btn.textContent = topic;
         btn.onclick = async () => {
-            selectedTopic = topic;
+            selectedChannel = topic;
+            selectedChannelType = 'MQTT';
             selectedTopicLabel.textContent = topic;
-            renderTopics(cachedTopics);
+            renderMqttTopics(cachedMqttTopics);
             await loadRecent();
+            if (streamConnected) {
+                reconnectStream();
+            }
         };
-        topicsList.appendChild(btn);
+        mqttTopicsList.appendChild(btn);
     }
+
+    topicsCount.textContent = String(topics.length);
+}
+
+function renderWsPlaceholder() {
+    wsChannelsList.innerHTML = '';
+    const item = document.createElement('div');
+    item.className = 'topic-chip';
+    item.textContent = 'WebSocket paused for now';
+    wsChannelsList.appendChild(item);
 }
 
 function formatTime(value) {
@@ -95,7 +136,7 @@ function formatTime(value) {
 
 function payloadPreview(payload) {
     if (!payload) return '';
-    return payload.length > 110 ? payload.slice(0, 110) + '...' : payload;
+    return payload.length > 120 ? payload.slice(0, 120) + '...' : payload;
 }
 
 function escapeHtml(text) {
@@ -107,8 +148,8 @@ function escapeHtml(text) {
 
 function renderEvents(events) {
     cachedEvents = events;
-    eventsCount.textContent = String(events.length);
     eventsTableBody.innerHTML = '';
+    eventsCount.textContent = String(events.length);
 
     const ordered = [...events].reverse();
 
@@ -133,9 +174,9 @@ function renderEvents(events) {
 async function refreshTopics() {
     try {
         const topics = await fetchJson('/api/events/mqtt/topics');
-        renderTopics(topics);
+        renderMqttTopics(topics);
     } catch (e) {
-        console.error(e);
+        console.error('Failed loading topics', e);
     }
 }
 
@@ -143,13 +184,28 @@ async function loadRecent() {
     try {
         const events = await fetchJson(buildRecentUrl());
         renderEvents(events);
-        await loadSummary(); // 🔥 backend-driven stats
+        await loadSummary();
     } catch (e) {
-        console.error(e);
+        console.error('Failed loading recent events', e);
     }
 }
 
+function shouldDisplayEvent(event) {
+    const manualChannelFilter = channelFilterInput.value.trim();
+    const textFilter = textFilterInput.value.trim();
+
+    const effectiveChannel = manualChannelFilter || selectedChannel;
+    const matchesChannel = !effectiveChannel || (event.channel || '').includes(effectiveChannel);
+    const matchesText = !textFilter || (event.payload || '').includes(textFilter);
+
+    return matchesChannel && matchesText;
+}
+
 function prependEvent(event) {
+    if (!shouldDisplayEvent(event)) {
+        return;
+    }
+
     cachedEvents.push(event);
 
     if (cachedEvents.length > 500) {
@@ -157,56 +213,138 @@ function prependEvent(event) {
     }
 
     renderEvents(cachedEvents);
-    loadSummary(); // 🔥 keep stats fresh
 }
 
-function connectStream() {
-    disconnectStream();
-
-    eventSource = new EventSource(buildStreamUrl());
-
-    eventSource.onmessage = (event) => {
-        try {
-            const parsed = JSON.parse(event.data);
-            prependEvent(parsed);
-        } catch (e) {
-            console.error('Failed parsing SSE event', e);
-        }
-    };
-
-    eventSource.onerror = (e) => {
-        console.error('SSE error', e);
-    };
-}
-
-function disconnectStream() {
+function disconnectStreamInternal() {
     if (eventSource) {
+        eventSource.onopen = null;
+        eventSource.onmessage = null;
+        eventSource.onerror = null;
         eventSource.close();
         eventSource = null;
     }
 }
 
-// 🔥 NEW — backend summary
+function connectStream() {
+    disconnectStreamInternal();
+
+    const url = buildStreamUrl();
+    console.log('Connecting SSE:', url);
+    setStreamStatus('connecting');
+
+    const es = new EventSource(url);
+    eventSource = es;
+
+    let activated = false;
+
+    es.onopen = () => {
+        if (eventSource !== es) {
+            return;
+        }
+        activated = true;
+        setStreamStatus('connected');
+    };
+
+    es.onmessage = (event) => {
+        if (eventSource !== es) {
+            return;
+        }
+
+        if (!activated) {
+            activated = true;
+            setStreamStatus('connected');
+        }
+
+        if (!event.data) {
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(event.data);
+            prependEvent(parsed);
+        } catch (e) {
+            console.error('Failed parsing SSE payload', e, event.data);
+        }
+    };
+
+    es.addEventListener('heartbeat', () => {
+        if (eventSource !== es) {
+            return;
+        }
+
+        if (!activated) {
+            activated = true;
+            setStreamStatus('connected');
+        }
+    });
+
+    es.onerror = () => {
+        if (eventSource !== es) {
+            return;
+        }
+
+        disconnectStreamInternal();
+        setStreamStatus('disconnected');
+    };
+}
+
+function disconnectStream() {
+    disconnectStreamInternal();
+    setStreamStatus('disconnected');
+}
+
+function reconnectStream() {
+    connectStream();
+}
+
 async function loadSummary() {
     try {
         const summary = await fetchJson('/api/dashboard/summary');
-
         topicsCount.textContent = String(summary.observedTopicCount ?? 0);
         eventsCount.textContent = String(summary.recentEventCount ?? 0);
-
     } catch (e) {
-        console.error(e);
+        console.error('Failed loading summary', e);
     }
 }
 
-refreshTopicsBtn.addEventListener('click', refreshTopics);
-loadRecentBtn.addEventListener('click', loadRecent);
-connectStreamBtn.addEventListener('click', connectStream);
-disconnectStreamBtn.addEventListener('click', disconnectStream);
-
-(async function init() {
+refreshTopicsBtn.addEventListener('click', async () => {
     await refreshTopics();
     await loadRecent();
-    await loadSummary(); // 🔥 initial load
+});
+
+loadRecentBtn.addEventListener('click', async () => {
+    await loadRecent();
+});
+
+connectStreamBtn.addEventListener('click', () => {
+    connectStream();
+});
+
+disconnectStreamBtn.addEventListener('click', () => {
+    disconnectStream();
+});
+
+channelFilterInput.addEventListener('change', async () => {
+    await loadRecent();
+    if (streamConnected) {
+        reconnectStream();
+    }
+});
+
+textFilterInput.addEventListener('change', async () => {
+    await loadRecent();
+    if (streamConnected) {
+        reconnectStream();
+    }
+});
+
+(async function init() {
+    setStreamStatus('disconnected');
+    renderWsPlaceholder();
+    await refreshTopics();
+    await loadRecent();
+    await loadSummary();
+
+    // prod-like behavior: auto-start live stream on load
     connectStream();
 })();

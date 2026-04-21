@@ -8,6 +8,7 @@
     --accent: #6ea8fe;
     --accent-2: #7ef0c4;
     --danger: #ff7b7b;
+    --ok: #7ef0c4;
     --shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
     --radius: 18px;
 }
@@ -25,7 +26,7 @@ body {
 
 .app-shell {
     display: grid;
-    grid-template-columns: 300px 1fr;
+    grid-template-columns: 320px 1fr;
     min-height: 100vh;
 }
 
@@ -34,13 +35,15 @@ body {
     background: rgba(13, 20, 36, 0.88);
     backdrop-filter: blur(14px);
     padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
 .brand {
     display: flex;
     align-items: center;
     gap: 14px;
-    margin-bottom: 24px;
 }
 
 .brand-badge {
@@ -63,6 +66,10 @@ body {
     margin: 4px 0 0;
     color: var(--muted);
     font-size: 13px;
+}
+
+.sidebar-panel {
+    min-height: 220px;
 }
 
 .main-content {
@@ -92,6 +99,7 @@ body {
     gap: 10px;
     flex-wrap: wrap;
     justify-content: flex-end;
+    align-items: center;
 }
 
 input, button {
@@ -111,6 +119,39 @@ button {
 button:hover {
     border-color: var(--accent);
     transform: translateY(-1px);
+}
+
+button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.status-badge {
+    padding: 9px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid var(--border);
+    background: var(--panel);
+}
+
+.status-badge.connected {
+    color: var(--ok);
+    border-color: rgba(126, 240, 196, 0.4);
+    background: rgba(126, 240, 196, 0.08);
+}
+
+.status-badge.connecting {
+    color: var(--accent);
+    border-color: rgba(110, 168, 254, 0.4);
+    background: rgba(110, 168, 254, 0.08);
+}
+
+.status-badge.disconnected {
+    color: var(--danger);
+    border-color: rgba(255, 123, 123, 0.4);
+    background: rgba(255, 123, 123, 0.08);
 }
 
 .panel {
@@ -237,6 +278,7 @@ tbody tr:hover {
     color: var(--text);
     cursor: pointer;
     font-size: 13px;
+    text-align: left;
 }
 
 .topic-chip:hover,

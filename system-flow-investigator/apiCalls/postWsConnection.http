@@ -1,0 +1,7 @@
+POST http://localhost:8080/api/control/ws/connect
+Content-Type: application/json
+
+{
+  "connectionName": "lab-consumer-ws",
+  "url": "ws://localhost:8090/ws/live"
+}

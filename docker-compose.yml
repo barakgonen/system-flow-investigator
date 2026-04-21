@@ -45,6 +45,9 @@ services:
       MQTT_HOST: emqx
       MQTT_PORT: 1883
       IN_TOPIC: lab/flow/out
+      WS_CHANNEL: ws/live/out
+    ports:
+      - "8090:8090"
 
 #  system-flow-investigator:
 #    build:

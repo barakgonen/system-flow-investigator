@@ -17,25 +17,33 @@
             </div>
         </div>
 
-        <section class="panel">
+        <section class="panel sidebar-panel">
             <div class="panel-header">
-                <h2>Topics</h2>
+                <h2>MQTT Topics</h2>
                 <button id="refreshTopicsBtn">Refresh</button>
             </div>
-            <div id="topicsList" class="topics-list"></div>
+            <div id="mqttTopicsList" class="topics-list"></div>
+        </section>
+
+        <section class="panel sidebar-panel">
+            <div class="panel-header">
+                <h2>WS Channels</h2>
+            </div>
+            <div id="wsChannelsList" class="topics-list"></div>
         </section>
     </aside>
 
     <main class="main-content">
         <header class="topbar">
             <div>
-                <h2>Live MQTT Monitor</h2>
-                <p>Thin UI. Backend-driven logic.</p>
+                <h2>Live Protocol Monitor</h2>
+                <p>Thin UI, backend-driven flow inspection.</p>
             </div>
 
             <div class="filters">
-                <input id="channelFilter" type="text" placeholder="Filter by channel">
+                <input id="channelFilter" type="text" placeholder="Filter by channel contains">
                 <input id="textFilter" type="text" placeholder="Filter payload text">
+                <span id="streamStatus" class="status-badge disconnected">Disconnected</span>
                 <button id="connectStreamBtn">Connect Stream</button>
                 <button id="disconnectStreamBtn">Disconnect</button>
             </div>
@@ -43,7 +51,7 @@
 
         <section class="stats-grid">
             <div class="stat-card">
-                <span class="stat-label">Observed Topics</span>
+                <span class="stat-label">Observed MQTT Topics</span>
                 <strong id="topicsCount">0</strong>
             </div>
             <div class="stat-card">
@@ -51,7 +59,7 @@
                 <strong id="eventsCount">0</strong>
             </div>
             <div class="stat-card">
-                <span class="stat-label">Selected Topic</span>
+                <span class="stat-label">Selected Channel</span>
                 <strong id="selectedTopicLabel">All</strong>
             </div>
         </section>
