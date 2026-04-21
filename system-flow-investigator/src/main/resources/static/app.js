@@ -11,24 +11,13 @@ const refreshTopicsBtn = document.getElementById('refreshTopicsBtn');
 const loadRecentBtn = document.getElementById('loadRecentBtn');
 const connectStreamBtn = document.getElementById('connectStreamBtn');
 const disconnectStreamBtn = document.getElementById('disconnectStreamBtn');
-
-const channelFilterInput = document.getElementById('channelFilter');
 const textFilterInput = document.getElementById('textFilter');
 
-let selectedChannel = null;
-let selectedChannelType = null;
 let eventSource = null;
 let cachedEvents = [];
 let cachedMqttTopics = [];
-let streamConnected = false;
-
-async function fetchJson(url) {
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`);
-    }
-    return response.json();
-}
+let cachedWsChannels = [];
+let selectedChannels = new Set();
 
 function setStreamStatus(state) {
     streamStatus.className = `status-badge ${state}`;
@@ -43,14 +32,38 @@ function setStreamStatus(state) {
 
     connectStreamBtn.disabled = state === 'connecting' || state === 'connected';
     disconnectStreamBtn.disabled = state === 'disconnected';
-    streamConnected = state === 'connected' || state === 'connecting';
+}
+
+async function fetchJson(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+function updateSelectionLabel() {
+    if (selectedChannels.size === 0) {
+        selectedTopicLabel.textContent = 'All channels';
+    } else {
+        selectedTopicLabel.textContent = `${selectedChannels.size} selected`;
+    }
+}
+
+function appendRepeatedParams(params, name, values) {
+    for (const value of values) {
+        params.append(name, value);
+    }
 }
 
 function buildRecentUrl() {
     const params = new URLSearchParams();
 
-    if (selectedChannel) {
-        params.set('channel', selectedChannel);
+    appendRepeatedParams(params, 'channel', Array.from(selectedChannels));
+
+    const textFilter = textFilterInput.value.trim();
+    if (textFilter) {
+        params.set('textContains', textFilter);
     }
 
     const query = params.toString();
@@ -60,69 +73,22 @@ function buildRecentUrl() {
 function buildStreamUrl() {
     const params = new URLSearchParams();
 
-    const manualChannelFilter = channelFilterInput.value.trim();
+    appendRepeatedParams(params, 'channel', Array.from(selectedChannels));
+
     const textFilter = textFilterInput.value.trim();
-
-    if (manualChannelFilter) {
-        params.set('channelContains', manualChannelFilter);
-    } else if (selectedChannel) {
-        params.set('channelContains', selectedChannel);
-    }
-
     if (textFilter) {
         params.set('textContains', textFilter);
     }
 
     params.set('_ts', String(Date.now()));
-
     return `/api/stream/events?${params.toString()}`;
 }
 
-function renderMqttTopics(topics) {
-    cachedMqttTopics = topics;
-    mqttTopicsList.innerHTML = '';
-
-    const allBtn = document.createElement('button');
-    allBtn.className = `topic-chip ${selectedChannel === null ? 'active' : ''}`;
-    allBtn.textContent = 'All topics';
-    allBtn.onclick = async () => {
-        selectedChannel = null;
-        selectedChannelType = null;
-        selectedTopicLabel.textContent = 'All';
-        renderMqttTopics(cachedMqttTopics);
-        await loadRecent();
-        if (streamConnected) {
-            reconnectStream();
-        }
-    };
-    mqttTopicsList.appendChild(allBtn);
-
-    for (const topic of topics) {
-        const btn = document.createElement('button');
-        btn.className = `topic-chip ${(selectedChannel === topic && selectedChannelType === 'MQTT') ? 'active' : ''}`;
-        btn.textContent = topic;
-        btn.onclick = async () => {
-            selectedChannel = topic;
-            selectedChannelType = 'MQTT';
-            selectedTopicLabel.textContent = topic;
-            renderMqttTopics(cachedMqttTopics);
-            await loadRecent();
-            if (streamConnected) {
-                reconnectStream();
-            }
-        };
-        mqttTopicsList.appendChild(btn);
-    }
-
-    topicsCount.textContent = String(topics.length);
-}
-
-function renderWsPlaceholder() {
-    wsChannelsList.innerHTML = '';
-    const item = document.createElement('div');
-    item.className = 'topic-chip';
-    item.textContent = 'WebSocket paused for now';
-    wsChannelsList.appendChild(item);
+function escapeHtml(text) {
+    return String(text)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
 }
 
 function formatTime(value) {
@@ -137,13 +103,6 @@ function formatTime(value) {
 function payloadPreview(payload) {
     if (!payload) return '';
     return payload.length > 120 ? payload.slice(0, 120) + '...' : payload;
-}
-
-function escapeHtml(text) {
-    return String(text)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
 }
 
 function renderEvents(events) {
@@ -171,12 +130,61 @@ function renderEvents(events) {
     }
 }
 
-async function refreshTopics() {
+function renderChannelGroup(container, items, label) {
+    container.innerHTML = '';
+
+    const allBtn = document.createElement('button');
+    allBtn.className = `topic-chip ${selectedChannels.size === 0 ? 'active' : ''}`;
+    allBtn.textContent = `All ${label}`;
+    allBtn.onclick = async () => {
+        selectedChannels.clear();
+        renderAllChannels();
+        updateSelectionLabel();
+        await loadRecent();
+        reconnectStreamIfConnected();
+    };
+    container.appendChild(allBtn);
+
+    for (const item of items) {
+        const btn = document.createElement('button');
+        btn.className = `topic-chip ${selectedChannels.has(item) ? 'active' : ''}`;
+        btn.textContent = item;
+        btn.onclick = async () => {
+            if (selectedChannels.has(item)) {
+                selectedChannels.delete(item);
+            } else {
+                selectedChannels.add(item);
+            }
+
+            renderAllChannels();
+            updateSelectionLabel();
+            await loadRecent();
+            reconnectStreamIfConnected();
+        };
+        container.appendChild(btn);
+    }
+}
+
+function renderAllChannels() {
+    renderChannelGroup(mqttTopicsList, cachedMqttTopics, 'MQTT');
+    renderChannelGroup(wsChannelsList, cachedWsChannels, 'WS');
+}
+
+async function refreshChannels() {
     try {
-        const topics = await fetchJson('/api/events/mqtt/topics');
-        renderMqttTopics(topics);
+        const [mqttTopics, wsChannels] = await Promise.all([
+            fetchJson('/api/events/mqtt/topics'),
+            fetchJson('/api/events/ws/channels')
+        ]);
+
+        cachedMqttTopics = mqttTopics;
+        cachedWsChannels = wsChannels;
+
+        topicsCount.textContent = String(mqttTopics.length);
+        renderAllChannels();
+        updateSelectionLabel();
     } catch (e) {
-        console.error('Failed loading topics', e);
+        console.error('Failed loading channels', e);
     }
 }
 
@@ -188,31 +196,6 @@ async function loadRecent() {
     } catch (e) {
         console.error('Failed loading recent events', e);
     }
-}
-
-function shouldDisplayEvent(event) {
-    const manualChannelFilter = channelFilterInput.value.trim();
-    const textFilter = textFilterInput.value.trim();
-
-    const effectiveChannel = manualChannelFilter || selectedChannel;
-    const matchesChannel = !effectiveChannel || (event.channel || '').includes(effectiveChannel);
-    const matchesText = !textFilter || (event.payload || '').includes(textFilter);
-
-    return matchesChannel && matchesText;
-}
-
-function prependEvent(event) {
-    if (!shouldDisplayEvent(event)) {
-        return;
-    }
-
-    cachedEvents.push(event);
-
-    if (cachedEvents.length > 500) {
-        cachedEvents = cachedEvents.slice(cachedEvents.length - 500);
-    }
-
-    renderEvents(cachedEvents);
 }
 
 function disconnectStreamInternal() {
@@ -229,7 +212,6 @@ function connectStream() {
     disconnectStreamInternal();
 
     const url = buildStreamUrl();
-    console.log('Connecting SSE:', url);
     setStreamStatus('connecting');
 
     const es = new EventSource(url);
@@ -261,7 +243,11 @@ function connectStream() {
 
         try {
             const parsed = JSON.parse(event.data);
-            prependEvent(parsed);
+            cachedEvents.push(parsed);
+            if (cachedEvents.length > 500) {
+                cachedEvents = cachedEvents.slice(cachedEvents.length - 500);
+            }
+            renderEvents(cachedEvents);
         } catch (e) {
             console.error('Failed parsing SSE payload', e, event.data);
         }
@@ -282,7 +268,6 @@ function connectStream() {
         if (eventSource !== es) {
             return;
         }
-
         disconnectStreamInternal();
         setStreamStatus('disconnected');
     };
@@ -293,8 +278,10 @@ function disconnectStream() {
     setStreamStatus('disconnected');
 }
 
-function reconnectStream() {
-    connectStream();
+function reconnectStreamIfConnected() {
+    if (streamStatus.textContent === 'Connected' || streamStatus.textContent === 'Connecting') {
+        connectStream();
+    }
 }
 
 async function loadSummary() {
@@ -308,7 +295,7 @@ async function loadSummary() {
 }
 
 refreshTopicsBtn.addEventListener('click', async () => {
-    await refreshTopics();
+    await refreshChannels();
     await loadRecent();
 });
 
@@ -324,27 +311,15 @@ disconnectStreamBtn.addEventListener('click', () => {
     disconnectStream();
 });
 
-channelFilterInput.addEventListener('change', async () => {
-    await loadRecent();
-    if (streamConnected) {
-        reconnectStream();
-    }
-});
-
 textFilterInput.addEventListener('change', async () => {
     await loadRecent();
-    if (streamConnected) {
-        reconnectStream();
-    }
+    reconnectStreamIfConnected();
 });
 
 (async function init() {
     setStreamStatus('disconnected');
-    renderWsPlaceholder();
-    await refreshTopics();
+    await refreshChannels();
     await loadRecent();
     await loadSummary();
-
-    // prod-like behavior: auto-start live stream on load
     connectStream();
 })();

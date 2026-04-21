@@ -8,7 +8,7 @@ import reactor.core.Disposable;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -23,8 +23,7 @@ public class SseStreamService {
         this.eventHub = eventHub;
     }
 
-    public SseEmitter openStream(String protocol,
-                                 String channelContains,
+    public SseEmitter openStream(Set<String> channels,
                                  String textContains,
                                  String traceId) {
 
@@ -32,10 +31,9 @@ public class SseStreamService {
         AtomicBoolean closed = new AtomicBoolean(false);
 
         Disposable subscription = eventHub.stream()
-                .filter(event -> protocol == null || event.protocol().equalsIgnoreCase(protocol))
-                .filter(event -> channelContains == null || safe(event.channel()).contains(channelContains))
-                .filter(event -> textContains == null || safe(event.payload()).contains(textContains))
-                .filter(event -> traceId == null || Objects.equals(traceId, event.traceId()))
+                .filter(event -> channels == null || channels.isEmpty() || channels.contains(event.channel()))
+                .filter(event -> textContains == null || textContains.isBlank() || safe(event.payload()).contains(textContains))
+                .filter(event -> traceId == null || traceId.isBlank() || traceId.equals(event.traceId()))
                 .subscribe(
                         event -> sendEvent(emitter, closed, event),
                         error -> closeEmitter(emitter, closed),

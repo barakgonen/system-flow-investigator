@@ -45,6 +45,16 @@ public class InvestigatorFacade {
         return recentEventStore.getRecent(channel);
     }
 
+    public List<ObservedEvent> getRecentEvents(Set<String> channels,
+                                               String textContains,
+                                               String traceId) {
+        return recentEventStore.getAllRecent().stream()
+                .filter(event -> channels == null || channels.isEmpty() || channels.contains(event.channel()))
+                .filter(event -> textContains == null || textContains.isBlank() || safe(event.payload()).contains(textContains))
+                .filter(event -> traceId == null || traceId.isBlank() || traceId.equals(event.traceId()))
+                .toList();
+    }
+
     public Set<String> observedTopics() {
         return mqttObserver.observedTopics();
     }
@@ -88,7 +98,7 @@ public class InvestigatorFacade {
                 .limit(10)
                 .toList();
 
-        boolean mqttConnected = true; // phase 1 simple assumption; improve in phase 2
+        boolean mqttConnected = true;
 
         return new DashboardSummary(
                 mqttConnected,
@@ -98,5 +108,9 @@ public class InvestigatorFacade {
                 latestTopics,
                 latestTraceIds
         );
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }

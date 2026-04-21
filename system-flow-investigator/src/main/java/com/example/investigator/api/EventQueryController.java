@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -22,9 +23,17 @@ public class EventQueryController {
 
     @GetMapping("/recent")
     public List<ObservedEvent> recent(
-            @RequestParam(name = "channel", required = false) String channel
+            @RequestParam(name = "channel", required = false) List<String> channel,
+            @RequestParam(name = "textContains", required = false) String textContains,
+            @RequestParam(name = "traceId", required = false) String traceId
     ) {
-        return facade.getRecentEvents(channel);
+        Set<String> channels = channel == null ? Set.of() : new LinkedHashSet<>(channel);
+
+        if (channels.size() == 1 && (textContains == null || textContains.isBlank()) && (traceId == null || traceId.isBlank())) {
+            return facade.getRecentEvents(channels.iterator().next());
+        }
+
+        return facade.getRecentEvents(channels, textContains, traceId);
     }
 
     @GetMapping("/mqtt/topics")
