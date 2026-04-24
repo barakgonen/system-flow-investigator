@@ -1,4 +1,4 @@
-package com.example.investigator.ingestion;
+package com.example.investigator.ingestion.infra;
 
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.storage.MessageFileSink;

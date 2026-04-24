@@ -1,4 +1,4 @@
-package com.example.investigator.ingestion;
+package com.example.investigator.ingestion.infra;
 
 import java.util.Set;
 

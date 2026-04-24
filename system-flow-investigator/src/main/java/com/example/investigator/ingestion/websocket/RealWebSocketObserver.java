@@ -1,12 +1,10 @@
 package com.example.investigator.ingestion.websocket;
 
-import com.example.investigator.domain.ConnectMqttRequest;
 import com.example.investigator.domain.ConnectWebSocketRequest;
 import com.example.investigator.domain.ObservedEvent;
-import com.example.investigator.domain.SubscribeMqttRequest;
 import com.example.investigator.domain.SubscribeWebSocketRequest;
-import com.example.investigator.ingestion.AbstractIngestionSource;
-import com.example.investigator.ingestion.ObservedEventPipeline;
+import com.example.investigator.ingestion.infra.AbstractIngestionSource;
+import com.example.investigator.ingestion.infra.ObservedEventPipeline;
 import com.example.investigator.service.TraceIdExtractor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,8 +12,11 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
-import org.springframework.web.socket.*;
-import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketHandler;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.client.WebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.time.Instant;
@@ -32,24 +33,35 @@ public class RealWebSocketObserver extends AbstractIngestionSource<ConnectWebSoc
 
     private final ObservedEventPipeline pipeline;
     private final TraceIdExtractor traceIdExtractor;
+    private final WebSocketClientFactory webSocketClientFactory;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final Map<String, WebSocketSession> sessionsByConnection = new ConcurrentHashMap<>();
 
     public RealWebSocketObserver(ObservedEventPipeline pipeline,
                                  TraceIdExtractor traceIdExtractor,
+                                 WebSocketClientFactory webSocketClientFactory,
                                  @Value("${ws.host:localhost}") String defaultHost,
                                  @Value("${ws.port:8090}") int defaultPort) {
         this.defaultHost = defaultHost;
         this.defaultPort = defaultPort;
         this.pipeline = pipeline;
         this.traceIdExtractor = traceIdExtractor;
+        this.webSocketClientFactory = webSocketClientFactory;
     }
 
     @PostConstruct
     public void start() {
-        connect(new ConnectWebSocketRequest("web", "ws://" + defaultHost + ":" + defaultPort + "/ws/live"));
-        subscribe(new SubscribeWebSocketRequest("", "", false));
+        connect(new ConnectWebSocketRequest(
+                "web",
+                "ws://" + defaultHost + ":" + defaultPort + "/ws/live"
+        ));
+
+        subscribe(new SubscribeWebSocketRequest(
+                "web",
+                "ws/live/out",
+                false
+        ));
     }
 
     @Override
@@ -60,36 +72,40 @@ public class RealWebSocketObserver extends AbstractIngestionSource<ConnectWebSoc
     @Override
     public void connect(ConnectWebSocketRequest request) {
         try {
-            StandardWebSocketClient client = new StandardWebSocketClient();
-
-            WebSocketHandler handler = new TextWebSocketHandler() {
-                @Override
-                public void afterConnectionEstablished(WebSocketSession session) {
-                    sessionsByConnection.put(request.connectionName(), session);
-                    System.out.println("WS connected: " + request.connectionName() + " -> " + request.url());
-                }
-
-                @Override
-                protected void handleTextMessage(WebSocketSession session, TextMessage message) {
-                    handleIncomingMessage(request.connectionName(), message.getPayload());
-                }
-
-                @Override
-                public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-                    sessionsByConnection.remove(request.connectionName());
-                    System.out.println("WS disconnected: " + request.connectionName() + " status=" + status);
-                }
-
-                @Override
-                public void handleTransportError(WebSocketSession session, Throwable exception) {
-                    System.err.println("WS transport error [" + request.connectionName() + "]: " + exception.getMessage());
-                }
-            };
+            WebSocketClient client = webSocketClientFactory.create();
+            WebSocketHandler handler = createHandler(request);
 
             client.execute(handler, request.url()).get();
         } catch (Exception e) {
             throw new IllegalStateException("Failed connecting to WebSocket " + request.url(), e);
         }
+    }
+
+    WebSocketHandler createHandler(ConnectWebSocketRequest request) {
+        return new TextWebSocketHandler() {
+
+            @Override
+            public void afterConnectionEstablished(WebSocketSession session) {
+                sessionsByConnection.put(request.connectionName(), session);
+                System.out.println("WS connected: " + request.connectionName() + " -> " + request.url());
+            }
+
+            @Override
+            protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+                handleIncomingMessage(request.connectionName(), message.getPayload());
+            }
+
+            @Override
+            public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+                sessionsByConnection.remove(request.connectionName());
+                System.out.println("WS disconnected: " + request.connectionName() + " status=" + status);
+            }
+
+            @Override
+            public void handleTransportError(WebSocketSession session, Throwable exception) {
+                System.err.println("WS transport error [" + request.connectionName() + "]: " + exception.getMessage());
+            }
+        };
     }
 
     @Override
@@ -120,11 +136,13 @@ public class RealWebSocketObserver extends AbstractIngestionSource<ConnectWebSoc
         try {
             JsonNode root = objectMapper.readTree(payload);
             JsonNode channelNode = root.get("channel");
+
             if (channelNode != null && !channelNode.isNull() && !channelNode.asText().isBlank()) {
                 return channelNode.asText();
             }
         } catch (Exception ignored) {
         }
+
         return "WS::" + connectionName;
     }
 }

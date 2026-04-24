@@ -1,4 +1,4 @@
-package com.example.investigator.ingestion;
+package com.example.investigator.ingestion.infra;
 
 import java.util.Map;
 import java.util.Set;
@@ -14,7 +14,7 @@ public abstract class AbstractIngestionSource<C, S> implements IngestionSource<C
         return observedChannels;
     }
 
-    protected boolean shouldPersist(String channel) {
+    public boolean shouldPersist(String channel) {
         return persistByChannel.getOrDefault(channel, false);
     }
 

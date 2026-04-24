@@ -3,8 +3,8 @@ package com.example.investigator.ingestion.mqtt;
 import com.example.investigator.domain.ConnectMqttRequest;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeMqttRequest;
-import com.example.investigator.ingestion.AbstractIngestionSource;
-import com.example.investigator.ingestion.ObservedEventPipeline;
+import com.example.investigator.ingestion.infra.AbstractIngestionSource;
+import com.example.investigator.ingestion.infra.ObservedEventPipeline;
 import com.example.investigator.service.TraceIdExtractor;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -25,6 +25,7 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
 
     private final ObservedEventPipeline pipeline;
     private final TraceIdExtractor traceIdExtractor;
+    private final MqttClientFactory mqttClientFactory;
 
     private final String defaultHost;
     private final int defaultPort;
@@ -40,13 +41,15 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
 
     public RealMqttObserver(ObservedEventPipeline pipeline,
                             TraceIdExtractor traceIdExtractor,
+                            MqttClientFactory mqttClientFactory,
                             @Value("${mqtt.host:localhost}") String defaultHost,
                             @Value("${mqtt.port:1883}") int defaultPort,
                             @Value("${mqtt.client-id-prefix:system-flow-investigator}") String defaultClientIdPrefix,
-                            @Value("${mqtt.topic-filter:#}") String initialTopicFilter,
+                            @Value("${mqtt.topic-filter:lab/flow/#}") String initialTopicFilter,
                             @Value("${mqtt.persist-by-default:false}") boolean persistByDefault) {
         this.pipeline = pipeline;
         this.traceIdExtractor = traceIdExtractor;
+        this.mqttClientFactory = mqttClientFactory;
         this.defaultHost = defaultHost;
         this.defaultPort = defaultPort;
         this.defaultClientIdPrefix = defaultClientIdPrefix;
@@ -65,8 +68,20 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
 
     @PostConstruct
     public void start() {
-        connect(new ConnectMqttRequest("flow-debugger", defaultHost, defaultPort, defaultClientIdPrefix, null, null));
-        subscribe(new SubscribeMqttRequest("flow-debugger", initialTopicFilter, persistByDefault));
+        connect(new ConnectMqttRequest(
+                "flow-debugger",
+                defaultHost,
+                defaultPort,
+                defaultClientIdPrefix,
+                null,
+                null
+        ));
+
+        subscribe(new SubscribeMqttRequest(
+                "flow-debugger",
+                initialTopicFilter,
+                persistByDefault
+        ));
     }
 
     @Override
@@ -89,12 +104,15 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
 
         try {
             String brokerUrl = "tcp://" + activeHost + ":" + activePort;
-            client = new MqttClient(brokerUrl, activeClientIdPrefix);// + "-" + UUID.randomUUID());
+            String clientId = activeClientIdPrefix + "-" + UUID.randomUUID();
+
+            client = mqttClientFactory.create(brokerUrl, clientId);
 
             client.setCallback(new MqttCallback() {
                 @Override
                 public void connectionLost(Throwable cause) {
-                    System.err.println("MQTT connection lost: " + (cause == null ? "unknown" : cause.getMessage()));
+                    System.err.println("MQTT connection lost: " +
+                            (cause == null ? "unknown" : cause.getMessage()));
                 }
 
                 @Override
@@ -134,6 +152,7 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
         try {
             client.subscribe(request.topicFilter(), 1);
             registerPersistence(request.topicFilter(), request.persistToFile());
+            markObserved(request.topicFilter());
             System.out.println("MQTT subscribed to " + request.topicFilter());
         } catch (MqttException e) {
             throw new IllegalStateException("Failed subscribing MQTT to " + request.topicFilter(), e);
@@ -164,7 +183,9 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
     public synchronized void stop() {
         if (client != null) {
             try {
-                client.disconnect();
+                if (client.isConnected()) {
+                    client.disconnect();
+                }
                 client.close();
             } catch (Exception ignored) {
             }
