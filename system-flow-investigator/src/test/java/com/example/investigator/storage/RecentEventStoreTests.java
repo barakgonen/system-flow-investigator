@@ -184,13 +184,16 @@ public class RecentEventStoreTests {
 
     // == Helpers
 
-    private ObservedEvent observedEvent(String channel, String traceId, String receivedAt) {
+    private ObservedEvent observedEvent(String channel, String traceId, String observedAt) {
         return new ObservedEvent(
-                "MQTT", "broker-1", channel,
-                Instant.parse(receivedAt),
+                "MQTT",
+                "broker-1",
+                channel,
+                Instant.parse(observedAt),
                 "{\"key\":\"value\"}",
                 Map.of("content-type", "application/json"),
-                traceId
+                traceId,
+                Instant.parse(observedAt)
         );
     }
 }

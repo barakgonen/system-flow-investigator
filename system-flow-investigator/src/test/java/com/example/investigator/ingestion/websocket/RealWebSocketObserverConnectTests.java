@@ -4,6 +4,7 @@ import com.example.investigator.domain.ConnectWebSocketRequest;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeWebSocketRequest;
 import com.example.investigator.ingestion.infra.ObservedEventPipeline;
+import com.example.investigator.service.SourceTimestampExtractor;
 import com.example.investigator.service.TraceIdExtractor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ class RealWebSocketObserverConnectTests {
 
     private ObservedEventPipeline pipeline;
     private TraceIdExtractor traceIdExtractor;
+    private SourceTimestampExtractor sourceTimestampExtractor;
     private WebSocketClientFactory webSocketClientFactory;
     private WebSocketClient webSocketClient;
     private WebSocketSession session;
@@ -32,6 +34,8 @@ class RealWebSocketObserverConnectTests {
     void setUp() {
         pipeline = mock(ObservedEventPipeline.class);
         traceIdExtractor = mock(TraceIdExtractor.class);
+        sourceTimestampExtractor = mock(SourceTimestampExtractor.class);
+
         webSocketClientFactory = mock(WebSocketClientFactory.class);
         webSocketClient = mock(WebSocketClient.class);
         session = mock(WebSocketSession.class);
@@ -39,6 +43,7 @@ class RealWebSocketObserverConnectTests {
         observer = new RealWebSocketObserver(
                 pipeline,
                 traceIdExtractor,
+                sourceTimestampExtractor,
                 webSocketClientFactory,
                 "localhost",
                 8090

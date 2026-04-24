@@ -143,9 +143,14 @@ public class InvestigatorFacadeTests {
     public void testGetRecentEvents_nullPayload_doesNotThrow() {
         // == Arrange
         ObservedEvent eventWithNullPayload = new ObservedEvent(
-                "MQTT", "broker-1", "topic/a",
+                "MQTT",
+                "broker-1",
+                "topic/a",
                 Instant.parse("2024-01-01T00:00:00Z"),
-                null, Map.of(), "trace-1"
+                null,
+                Map.of(),
+                "trace-1",
+                Instant.parse("2024-01-01T00:00:00Z")
         );
         when(recentEventStore.getAllRecent()).thenReturn(List.of(eventWithNullPayload));
 
@@ -340,9 +345,14 @@ public class InvestigatorFacadeTests {
     public void testGetDashboardSummary_filtersBlankChannelsAndTraceIds() {
         // == Arrange
         ObservedEvent eventWithBlankChannel = new ObservedEvent(
-                "MQTT", "broker-1", "   ",
+                "MQTT",
+                "broker-1",
+                "   ",
                 Instant.parse("2024-01-01T00:00:00Z"),
-                "payload", Map.of(), "   "
+                "payload",
+                Map.of(),
+                "   ",
+                Instant.parse("2024-01-01T00:00:00Z")
         );
         when(recentEventStore.getAllRecent()).thenReturn(List.of(eventWithBlankChannel));
         when(mqttObserver.observedChannels()).thenReturn(Set.of());
@@ -376,21 +386,27 @@ public class InvestigatorFacadeTests {
 
     private ObservedEvent observedEvent(String channel, String traceId) {
         return new ObservedEvent(
-                "MQTT", "broker-1", channel,
+                "MQTT",
+                "broker-1",
+                channel,
                 Instant.parse("2024-01-01T00:00:00Z"),
                 "{\"key\":\"value\"}",
                 Map.of("content-type", "application/json"),
-                traceId
+                traceId,
+                Instant.parse("2024-01-01T00:00:00Z")
         );
     }
 
     private ObservedEvent observedEventWithPayload(String channel, String traceId, String payload) {
         return new ObservedEvent(
-                "MQTT", "broker-1", channel,
+                "MQTT",
+                "broker-1",
+                channel,
                 Instant.parse("2024-01-01T00:00:00Z"),
                 payload,
                 Map.of("content-type", "application/json"),
-                traceId
+                traceId,
+                Instant.parse("2024-01-01T00:00:00Z")
         );
     }
 }

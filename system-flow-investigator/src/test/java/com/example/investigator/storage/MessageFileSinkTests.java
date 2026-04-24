@@ -117,11 +117,14 @@ public class MessageFileSinkTests {
 
     private ObservedEvent observedEvent(String traceId) {
         return new ObservedEvent(
-                "MQTT", "broker-1", "topic/a",
+                "MQTT",
+                "broker-1",
+                "topic/a",
                 Instant.parse("2024-01-01T00:00:00Z"),
                 "{\"key\":\"value\"}",
                 Map.of("content-type", "application/json"),
-                traceId
+                traceId,
+                Instant.parse("2024-01-01T00:00:01Z")
         );
     }
 }
