@@ -5,6 +5,7 @@ import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeMqttRequest;
 import com.example.investigator.ingestion.infra.AbstractIngestionSource;
 import com.example.investigator.ingestion.infra.ObservedEventPipeline;
+import com.example.investigator.service.SourceTimestampExtractor;
 import com.example.investigator.service.TraceIdExtractor;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -25,6 +26,7 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
 
     private final ObservedEventPipeline pipeline;
     private final TraceIdExtractor traceIdExtractor;
+    private final SourceTimestampExtractor sourceTimestampExtractor;
     private final MqttClientFactory mqttClientFactory;
 
     private final String defaultHost;
@@ -41,6 +43,7 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
 
     public RealMqttObserver(ObservedEventPipeline pipeline,
                             TraceIdExtractor traceIdExtractor,
+                            SourceTimestampExtractor sourceTimestampExtractor,
                             MqttClientFactory mqttClientFactory,
                             @Value("${mqtt.host:localhost}") String defaultHost,
                             @Value("${mqtt.port:1883}") int defaultPort,
@@ -49,6 +52,7 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
                             @Value("${mqtt.persist-by-default:false}") boolean persistByDefault) {
         this.pipeline = pipeline;
         this.traceIdExtractor = traceIdExtractor;
+        this.sourceTimestampExtractor = sourceTimestampExtractor;
         this.mqttClientFactory = mqttClientFactory;
         this.defaultHost = defaultHost;
         this.defaultPort = defaultPort;
@@ -173,7 +177,8 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
                         "qos", String.valueOf(message.getQos()),
                         "retained", String.valueOf(message.isRetained())
                 ),
-                traceIdExtractor.extract(payload)
+                traceIdExtractor.extract(payload),
+                sourceTimestampExtractor.extract(payload)
         );
 
         pipeline.accept(event, shouldPersist(topic));

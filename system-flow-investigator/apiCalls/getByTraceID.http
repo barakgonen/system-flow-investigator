@@ -1,0 +1,5 @@
+@traceId = e4dcce9e-2e5f-4184-be10-d67085cbf57d
+
+### Get Correlation Trace
+GET http://localhost:8080/api/correlation/trace/{{traceId}}
+Accept: application/json

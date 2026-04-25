@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
 import java.util.Set;
@@ -42,7 +43,7 @@ public class RecentEventStore {
         for (Deque<ObservedEvent> deque : store.values()) {
             result.addAll(deque);
         }
-        result.sort((a, b) -> a.receivedAt().compareTo(b.receivedAt()));
+        result.sort(Comparator.comparing(ObservedEvent::observedAt));
         return result;
     }
 }

@@ -41,7 +41,7 @@ public class ProducerMain {
 
             byte[] bytes = mapper.writeValueAsString(payload).getBytes(StandardCharsets.UTF_8);
             client.publish(TOPIC, new MqttMessage(bytes));
-            client.publish(OTHER_TOPIC, new MqttMessage(bytes)); // publish to a topic that doesn't match the subscription filter
+//            client.publish(OTHER_TOPIC, new MqttMessage(bytes)); // publish to a topic that doesn't match the subscription filter
 
             if (sequence % 50 == 0) {
                 client.publish(UNRELATED_TOPIC, new MqttMessage(bytes)); // publish to an unrelated topic that doesn't match the subscription filter

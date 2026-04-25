@@ -5,11 +5,12 @@ import java.util.Map;
 
 public record ObservedEvent(
         String protocol,
-        String sourceName,
+        String source,
         String channel,
-        Instant receivedAt,
+        Instant observedAt,
         String payload,
-        Map<String, String> headers,
-        String traceId
+        Map<String, String> metadata,
+        String traceId,
+        Instant sourceSentAt
 ) {
 }

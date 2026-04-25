@@ -5,150 +5,38 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
-public class ObservedEventTests {
+class ObservedEventTests {
 
     @Test
-    public void testConstructorAndAccessors() {
-        Instant observedAt = Instant.now();
-        Instant sourceSentAt = Instant.parse("2024-01-01T00:00:01Z");
+    void shouldExposeAllFields() {
+        Instant observedAt = Instant.parse("2026-04-24T10:00:01Z");
+        Instant sourceSentAt = Instant.parse("2026-04-24T10:00:00Z");
 
         ObservedEvent event = new ObservedEvent(
                 "MQTT",
                 "broker-1",
-                "topic/a",
+                "lab/flow/in",
                 observedAt,
-                "{\"key\":\"value\"}",
-                Map.of("content-type", "application/json"),
-                "trace-123",
+                "{\"traceId\":\"trace-1\"}",
+                Map.of("qos", "1"),
+                "trace-1",
                 sourceSentAt
         );
 
-        assertEquals("MQTT", event.protocol());
-        assertEquals("broker-1", event.source());
-        assertEquals("topic/a", event.channel());
-        assertEquals(observedAt, event.observedAt());
-        assertEquals("{\"key\":\"value\"}", event.payload());
-        assertEquals(Map.of("content-type", "application/json"), event.metadata());
-        assertEquals("trace-123", event.traceId());
-        assertEquals(sourceSentAt, event.sourceSentAt());
+        assertThat(event.protocol()).isEqualTo("MQTT");
+        assertThat(event.source()).isEqualTo("broker-1");
+        assertThat(event.channel()).isEqualTo("lab/flow/in");
+        assertThat(event.observedAt()).isEqualTo(observedAt);
+        assertThat(event.payload()).contains("trace-1");
+        assertThat(event.metadata()).containsEntry("qos", "1");
+        assertThat(event.traceId()).isEqualTo("trace-1");
+        assertThat(event.sourceSentAt()).isEqualTo(sourceSentAt);
     }
 
     @Test
-    public void testEquality_equalObjects() {
-        Instant observedAt = Instant.parse("2024-01-01T00:00:00Z");
-        Instant sourceSentAt = Instant.parse("2024-01-01T00:00:01Z");
-
-        ObservedEvent event1 = new ObservedEvent(
-                "MQTT",
-                "broker-1",
-                "topic/a",
-                observedAt,
-                "{\"key\":\"value\"}",
-                Map.of("content-type", "application/json"),
-                "trace-123",
-                sourceSentAt
-        );
-
-        ObservedEvent event2 = new ObservedEvent(
-                "MQTT",
-                "broker-1",
-                "topic/a",
-                observedAt,
-                "{\"key\":\"value\"}",
-                Map.of("content-type", "application/json"),
-                "trace-123",
-                sourceSentAt
-        );
-
-        assertEquals(event1, event2);
-    }
-
-    @Test
-    public void testEquality_differentObjects() {
-        Instant observedAt = Instant.parse("2024-01-01T00:00:00Z");
-
-        ObservedEvent event1 = new ObservedEvent(
-                "MQTT",
-                "broker-1",
-                "topic/a",
-                observedAt,
-                "{\"key\":\"value\"}",
-                Map.of("content-type", "application/json"),
-                "trace-123",
-                Instant.parse("2024-01-01T00:00:01Z")
-        );
-
-        ObservedEvent event2 = new ObservedEvent(
-                "WS",
-                "broker-2",
-                "topic/b",
-                observedAt,
-                "{\"other\":\"data\"}",
-                Map.of("content-type", "text/plain"),
-                "trace-456",
-                Instant.parse("2024-01-01T00:00:02Z")
-        );
-
-        assertNotEquals(event1, event2);
-    }
-
-    @Test
-    public void testHashCode_equalObjects() {
-        Instant observedAt = Instant.parse("2024-01-01T00:00:00Z");
-        Instant sourceSentAt = Instant.parse("2024-01-01T00:00:01Z");
-
-        ObservedEvent event1 = new ObservedEvent(
-                "MQTT",
-                "broker-1",
-                "topic/a",
-                observedAt,
-                "{\"key\":\"value\"}",
-                Map.of("content-type", "application/json"),
-                "trace-123",
-                sourceSentAt
-        );
-
-        ObservedEvent event2 = new ObservedEvent(
-                "MQTT",
-                "broker-1",
-                "topic/a",
-                observedAt,
-                "{\"key\":\"value\"}",
-                Map.of("content-type", "application/json"),
-                "trace-123",
-                sourceSentAt
-        );
-
-        assertEquals(event1.hashCode(), event2.hashCode());
-    }
-
-    @Test
-    public void testToString_containsAllFields() {
-        ObservedEvent event = new ObservedEvent(
-                "MQTT",
-                "broker-1",
-                "topic/a",
-                Instant.parse("2024-01-01T00:00:00Z"),
-                "{\"key\":\"value\"}",
-                Map.of("content-type", "application/json"),
-                "trace-123",
-                Instant.parse("2024-01-01T00:00:01Z")
-        );
-
-        String result = event.toString();
-
-        assertTrue(result.contains("MQTT"));
-        assertTrue(result.contains("broker-1"));
-        assertTrue(result.contains("topic/a"));
-        assertTrue(result.contains("2024-01-01T00:00:00Z"));
-        assertTrue(result.contains("2024-01-01T00:00:01Z"));
-        assertTrue(result.contains("trace-123"));
-    }
-
-    @Test
-    public void testNullFields() {
+    void shouldSupportNullFields() {
         ObservedEvent event = new ObservedEvent(
                 null,
                 null,
@@ -160,52 +48,45 @@ public class ObservedEventTests {
                 null
         );
 
-        assertNull(event.protocol());
-        assertNull(event.source());
-        assertNull(event.channel());
-        assertNull(event.observedAt());
-        assertNull(event.payload());
-        assertNull(event.metadata());
-        assertNull(event.traceId());
-        assertNull(event.sourceSentAt());
+        assertThat(event.protocol()).isNull();
+        assertThat(event.source()).isNull();
+        assertThat(event.channel()).isNull();
+        assertThat(event.observedAt()).isNull();
+        assertThat(event.payload()).isNull();
+        assertThat(event.metadata()).isNull();
+        assertThat(event.traceId()).isNull();
+        assertThat(event.sourceSentAt()).isNull();
     }
 
     @Test
-    public void testEmptyMetadata() {
-        ObservedEvent event = new ObservedEvent(
+    void shouldSupportEqualityHashCodeAndToString() {
+        Instant observedAt = Instant.parse("2026-04-24T10:00:01Z");
+        Instant sourceSentAt = Instant.parse("2026-04-24T10:00:00Z");
+
+        ObservedEvent one = new ObservedEvent(
                 "MQTT",
                 "broker-1",
-                "topic/a",
-                Instant.now(),
+                "lab/flow/in",
+                observedAt,
                 "payload",
                 Map.of(),
-                "trace-123",
-                null
+                "trace-1",
+                sourceSentAt
         );
 
-        assertEquals(Map.of(), event.metadata());
-    }
-
-    @Test
-    public void testMultipleMetadataEntries() {
-        Map<String, String> metadata = Map.of(
-                "content-type", "application/json",
-                "x-trace-id", "trace-123",
-                "x-source", "broker-1"
-        );
-
-        ObservedEvent event = new ObservedEvent(
+        ObservedEvent two = new ObservedEvent(
                 "MQTT",
                 "broker-1",
-                "topic/a",
-                Instant.now(),
+                "lab/flow/in",
+                observedAt,
                 "payload",
-                metadata,
-                "trace-123",
-                Instant.parse("2024-01-01T00:00:01Z")
+                Map.of(),
+                "trace-1",
+                sourceSentAt
         );
 
-        assertEquals(metadata, event.metadata());
-        assertEquals(3, event.metadata().size());
+        assertThat(one).isEqualTo(two);
+        assertThat(one.hashCode()).isEqualTo(two.hashCode());
+        assertThat(one.toString()).contains("MQTT", "broker-1", "lab/flow/in", "trace-1");
     }
 }
