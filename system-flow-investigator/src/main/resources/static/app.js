@@ -15,6 +15,7 @@ const textFilterInput = document.getElementById('textFilter');
 
 const toggleLiveEventsBtn = document.getElementById('toggleLiveEventsBtn');
 const liveEventsBody = document.getElementById('liveEventsBody');
+const liveEventsPanel = document.getElementById('liveEventsPanel');
 
 const traceIdInput = document.getElementById('traceIdInput');
 const inspectTraceBtn = document.getElementById('inspectTraceBtn');
@@ -22,28 +23,25 @@ const traceSummary = document.getElementById('traceSummary');
 const traceTimeline = document.getElementById('traceTimeline');
 const toggleTraceBtn = document.getElementById('toggleTraceBtn');
 const traceBody = document.getElementById('traceBody');
-const liveEventsPanel = document.getElementById('liveEventsPanel');
 const tracePanel = document.getElementById('tracePanel');
 const flowStatus = document.getElementById('flowStatus');
 const flowGraph = document.getElementById('flowGraph');
 
-const EXPECTED_FLOW = [
-    {
-        channel: 'lab/flow/in',
-        label: 'Producer',
-        protocol: 'MQTT'
-    },
-    {
-        channel: 'lab/flow/out',
-        label: 'Consumer → Producer',
-        protocol: 'MQTT'
-    },
-    {
-        channel: 'ws/live/out',
-        label: 'UI Delivery',
-        protocol: 'WS'
-    }
-];
+const flowConfigPanel = document.getElementById('flowConfigPanel');
+const toggleConfigBtn = document.getElementById('toggleConfigBtn');
+const configBody = document.getElementById('configBody');
+const loadConfigBtn = document.getElementById('loadConfigBtn');
+const saveConfigBtn = document.getElementById('saveConfigBtn');
+const exportConfigBtn = document.getElementById('exportConfigBtn');
+const importConfigBtn = document.getElementById('importConfigBtn');
+const importConfigFile = document.getElementById('importConfigFile');
+const configNameInput = document.getElementById('configNameInput');
+const configDescriptionInput = document.getElementById('configDescriptionInput');
+const maxStepDurationInput = document.getElementById('maxStepDurationInput');
+const allowExtraEventsInput = document.getElementById('allowExtraEventsInput');
+const addFlowStepBtn = document.getElementById('addFlowStepBtn');
+const flowStepsEditor = document.getElementById('flowStepsEditor');
+const configMessage = document.getElementById('configMessage');
 
 const SLOW_STEP_THRESHOLD_MS = 50;
 
@@ -55,6 +53,8 @@ let selectedChannels = new Set();
 
 let liveEventsCollapsed = false;
 let traceCollapsed = false;
+let configCollapsed = false;
+let currentConfig = null;
 
 function setStreamStatus(state) {
     streamStatus.className = `status-badge ${state}`;
@@ -71,8 +71,8 @@ function setStreamStatus(state) {
     disconnectStreamBtn.disabled = state === 'disconnected';
 }
 
-async function fetchJson(url) {
-    const response = await fetch(url);
+async function fetchJson(url, options = {}) {
+    const response = await fetch(url, options);
     if (!response.ok) {
         throw new Error(`Request failed: ${response.status}`);
     }
@@ -387,12 +387,17 @@ function renderTrace(trace) {
 
     if (!trace.events || trace.events.length === 0) {
         traceSummary.innerHTML = `<strong>${escapeHtml(trace.traceId || '-')}</strong> | no events found`;
-        flowStatus.classList.add('hidden');
-        flowGraph.classList.add('hidden');
+
+        if (trace.validation) {
+            renderFlowStatus(trace.validation);
+            renderFlowGraph(trace.validation);
+        } else {
+            flowStatus.classList.add('hidden');
+            flowGraph.classList.add('hidden');
+        }
+
         return;
     }
-
-    const flowAnalysis = analyzeFlow(trace.events);
 
     traceSummary.innerHTML = `
         <strong>${escapeHtml(trace.traceId || '-')}</strong>
@@ -401,8 +406,13 @@ function renderTrace(trace) {
         <span>Observed duration: ${formatDuration(trace.totalObservedDurationMs)}</span>
     `;
 
-    renderFlowStatus(flowAnalysis);
-    renderFlowGraph(trace.events, flowAnalysis);
+    if (trace.validation) {
+        renderFlowStatus(trace.validation);
+        renderFlowGraph(trace.validation);
+    } else {
+        flowStatus.classList.add('hidden');
+        flowGraph.classList.add('hidden');
+    }
 
     for (const event of trace.events) {
         const item = document.createElement('div');
@@ -440,115 +450,275 @@ function renderTrace(trace) {
     }
 }
 
-function analyzeFlow(events) {
-    const channels = new Set(events.map(event => event.channel));
-
-    const steps = EXPECTED_FLOW.map(expected => {
-        const event = events.find(candidate => candidate.channel === expected.channel);
-
-        return {
-            ...expected,
-            found: Boolean(event),
-            event
-        };
-    });
-
-    const firstMissingIndex = steps.findIndex(step => !step.found);
-    const missingSteps = steps.filter(step => !step.found);
-
-    let status = 'complete';
-    let message = 'Flow completed successfully.';
-
-    if (firstMissingIndex === 0) {
-        status = 'broken';
-        message = `Flow did not reach the first expected step: ${steps[0].channel}`;
-    } else if (firstMissingIndex > 0) {
-        const previousStep = steps[firstMissingIndex - 1];
-        const missingStep = steps[firstMissingIndex];
-
-        status = 'broken';
-        message = `Flow likely stopped after ${previousStep.channel}, before ${missingStep.channel}.`;
-    }
-
-    const extraEvents = events.filter(event =>
-        !EXPECTED_FLOW.some(expected => expected.channel === event.channel)
-    );
-
-    return {
-        status,
-        message,
-        steps,
-        missingSteps,
-        extraEvents,
-        channels
-    };
-}
-
-function renderFlowStatus(analysis) {
+function renderFlowStatus(validation) {
     flowStatus.classList.remove('hidden', 'flow-ok', 'flow-broken', 'flow-warning');
 
-    if (analysis.status === 'complete') {
+    const status = validation.status || 'UNKNOWN';
+
+    if (status === 'COMPLETE') {
         flowStatus.classList.add('flow-ok');
+    } else if (status === 'COMPLETE_WITH_UNEXPECTED_EVENTS') {
+        flowStatus.classList.add('flow-warning');
     } else {
         flowStatus.classList.add('flow-broken');
     }
 
-    const missingText = analysis.missingSteps.length > 0
-        ? `Missing: ${analysis.missingSteps.map(step => step.channel).join(', ')}`
+    const missingText = validation.missingChannels && validation.missingChannels.length > 0
+        ? `Missing: ${validation.missingChannels.join(', ')}`
         : 'No missing expected steps.';
 
-    const extraText = analysis.extraEvents.length > 0
-        ? `Extra observed: ${analysis.extraEvents.map(event => event.channel).join(', ')}`
+    const extraText = validation.extraChannels && validation.extraChannels.length > 0
+        ? `Extra observed: ${validation.extraChannels.join(', ')}`
         : '';
 
+    const title = status === 'COMPLETE'
+        ? '✅ Complete flow'
+        : status === 'COMPLETE_WITH_UNEXPECTED_EVENTS'
+            ? '⚠️ Complete with unexpected events'
+            : status === 'NO_CONFIG'
+                ? '⚙️ No flow config'
+                : '❌ Broken flow';
+
     flowStatus.innerHTML = `
-        <strong>${analysis.status === 'complete' ? '✅ Complete flow' : '❌ Broken flow'}</strong>
-        <span>${escapeHtml(analysis.message)}</span>
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(validation.message || '')}</span>
         <small>${escapeHtml(missingText)}</small>
         ${extraText ? `<small>${escapeHtml(extraText)}</small>` : ''}
     `;
 }
 
-function renderFlowGraph(events, analysis) {
+function renderFlowGraph(validation) {
     flowGraph.classList.remove('hidden');
     flowGraph.innerHTML = '';
 
-    analysis.steps.forEach((step, index) => {
+    const steps = validation.steps || [];
+
+    if (steps.length === 0) {
+        flowGraph.innerHTML = `
+            <div class="flow-extra">
+                <strong>No expected flow configured</strong>
+                <span>Configure expected steps to enable flow validation.</span>
+            </div>
+        `;
+        return;
+    }
+
+    steps.forEach((step, index) => {
         const node = document.createElement('div');
         node.className = `flow-node ${step.found ? 'found' : 'missing'}`;
 
-        const sourceDelta = step.event?.deltaFromPreviousSourceMs;
-        const observedDelta = step.event?.deltaFromPreviousObservedMs;
-
         node.innerHTML = `
-            <div class="flow-node-label">${escapeHtml(step.label)}</div>
-            <div class="flow-node-channel">${escapeHtml(step.channel)}</div>
-            <div class="flow-node-protocol">${escapeHtml(step.protocol)}</div>
+            <div class="flow-node-label">${escapeHtml(step.label || `Step ${step.index}`)}</div>
+            <div class="flow-node-channel">${escapeHtml(step.channel || '-')}</div>
+            <div class="flow-node-protocol">${escapeHtml(step.protocol || '-')}</div>
             <div class="flow-node-time">
-                ${step.found ? `Δ ${formatDuration(sourceDelta)}` : 'Missing'}
+                ${step.found ? `Δ ${formatDuration(step.deltaFromPreviousSourceMs)}` : 'Missing'}
             </div>
-            ${step.found ? `<div class="flow-node-observed">obs Δ ${formatDuration(observedDelta)}</div>` : ''}
+            ${step.found ? `<div class="flow-node-observed">obs Δ ${formatDuration(step.deltaFromPreviousObservedMs)}</div>` : ''}
         `;
 
         flowGraph.appendChild(node);
 
-        if (index < analysis.steps.length - 1) {
+        if (index < steps.length - 1) {
+            const next = steps[index + 1];
             const arrow = document.createElement('div');
-            arrow.className = `flow-arrow ${step.found && analysis.steps[index + 1].found ? 'connected' : 'broken'}`;
+            arrow.className = `flow-arrow ${step.found && next.found ? 'connected' : 'broken'}`;
             arrow.innerHTML = '→';
             flowGraph.appendChild(arrow);
         }
     });
 
-    if (analysis.extraEvents.length > 0) {
+    if (validation.extraChannels && validation.extraChannels.length > 0) {
         const extra = document.createElement('div');
         extra.className = 'flow-extra';
         extra.innerHTML = `
             <strong>Extra observed channels</strong>
-            <span>${escapeHtml(analysis.extraEvents.map(event => event.channel).join(', '))}</span>
+            <span>${escapeHtml(validation.extraChannels.join(', '))}</span>
         `;
         flowGraph.appendChild(extra);
     }
+}
+
+async function loadConfig() {
+    try {
+        const config = await fetchJson('/api/investigation/config');
+        currentConfig = normalizeConfig(config);
+        renderConfigEditor(currentConfig);
+        showConfigMessage('Config loaded.', 'ok');
+    } catch (e) {
+        console.error('Failed loading config', e);
+        showConfigMessage('Failed loading config.', 'error');
+    }
+}
+
+async function saveConfig() {
+    try {
+        const config = readConfigFromEditor();
+
+        const saved = await fetchJson('/api/investigation/config', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(config)
+        });
+
+        currentConfig = normalizeConfig(saved);
+        renderConfigEditor(currentConfig);
+        showConfigMessage('Config saved.', 'ok');
+
+        if (traceIdInput.value.trim()) {
+            inspectTrace();
+        }
+    } catch (e) {
+        console.error('Failed saving config', e);
+        showConfigMessage('Failed saving config.', 'error');
+    }
+}
+
+function normalizeConfig(config) {
+    return {
+        name: config?.name || '',
+        description: config?.description || '',
+        steps: Array.isArray(config?.steps) ? config.steps : [],
+        rules: {
+            maxStepDurationMs: config?.rules?.maxStepDurationMs ?? 50,
+            allowExtraEvents: config?.rules?.allowExtraEvents ?? true
+        }
+    };
+}
+
+function renderConfigEditor(config) {
+    configNameInput.value = config.name || '';
+    configDescriptionInput.value = config.description || '';
+    maxStepDurationInput.value = String(config.rules?.maxStepDurationMs ?? 50);
+    allowExtraEventsInput.checked = Boolean(config.rules?.allowExtraEvents ?? true);
+
+    flowStepsEditor.innerHTML = '';
+
+    const steps = [...(config.steps || [])]
+        .sort((a, b) => Number(a.index ?? 0) - Number(b.index ?? 0));
+
+    steps.forEach((step, idx) => {
+        flowStepsEditor.appendChild(createStepEditorRow({
+            index: idx + 1,
+            protocol: step.protocol || '',
+            channel: step.channel || '',
+            label: step.label || ''
+        }));
+    });
+}
+
+function createStepEditorRow(step) {
+    const row = document.createElement('div');
+    row.className = 'flow-step-row';
+
+    row.innerHTML = `
+        <div class="step-index">${step.index}</div>
+
+        <select class="step-protocol">
+            <option value="MQTT" ${step.protocol === 'MQTT' ? 'selected' : ''}>MQTT</option>
+            <option value="WS" ${step.protocol === 'WS' ? 'selected' : ''}>WS</option>
+        </select>
+
+        <input class="step-channel" type="text" placeholder="channel/topic" value="${escapeHtml(step.channel)}">
+        <input class="step-label" type="text" placeholder="label" value="${escapeHtml(step.label)}">
+
+        <button class="secondary-button remove-step-btn">Remove</button>
+    `;
+
+    row.querySelector('.remove-step-btn').onclick = () => {
+        row.remove();
+        reindexStepRows();
+    };
+
+    return row;
+}
+
+function reindexStepRows() {
+    [...flowStepsEditor.querySelectorAll('.flow-step-row')].forEach((row, index) => {
+        row.querySelector('.step-index').textContent = String(index + 1);
+    });
+}
+
+function addFlowStep() {
+    const nextIndex = flowStepsEditor.querySelectorAll('.flow-step-row').length + 1;
+
+    flowStepsEditor.appendChild(createStepEditorRow({
+        index: nextIndex,
+        protocol: 'MQTT',
+        channel: '',
+        label: ''
+    }));
+}
+
+function readConfigFromEditor() {
+    const steps = [...flowStepsEditor.querySelectorAll('.flow-step-row')].map((row, index) => ({
+        index: index + 1,
+        protocol: row.querySelector('.step-protocol').value,
+        channel: row.querySelector('.step-channel').value.trim(),
+        label: row.querySelector('.step-label').value.trim()
+    })).filter(step => step.channel);
+
+    return {
+        name: configNameInput.value.trim(),
+        description: configDescriptionInput.value.trim(),
+        steps,
+        rules: {
+            maxStepDurationMs: Number(maxStepDurationInput.value || 0),
+            allowExtraEvents: allowExtraEventsInput.checked
+        }
+    };
+}
+
+function exportConfig() {
+    const config = readConfigFromEditor();
+    const blob = new Blob([JSON.stringify(config, null, 2)], {
+        type: 'application/json'
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `${config.name || 'investigation-config'}.json`;
+    link.click();
+
+    URL.revokeObjectURL(url);
+    showConfigMessage('Config exported.', 'ok');
+}
+
+function importConfigFromFile(file) {
+    const reader = new FileReader();
+
+    reader.onload = async () => {
+        try {
+            const parsed = JSON.parse(reader.result);
+            currentConfig = normalizeConfig(parsed);
+            renderConfigEditor(currentConfig);
+            await saveConfig();
+            showConfigMessage('Config imported and saved.', 'ok');
+        } catch (e) {
+            console.error('Failed importing config', e);
+            showConfigMessage('Invalid config file.', 'error');
+        }
+    };
+
+    reader.readAsText(file);
+}
+
+function showConfigMessage(message, type) {
+    configMessage.textContent = message;
+    configMessage.className = `config-message ${type || ''}`;
+}
+
+function toggleConfig() {
+    configCollapsed = !configCollapsed;
+
+    configBody.classList.toggle('collapsed', configCollapsed);
+    flowConfigPanel.classList.toggle('panel-collapsed', configCollapsed);
+
+    toggleConfigBtn.textContent = configCollapsed ? 'Expand' : 'Collapse';
 }
 
 function toggleLiveEvents() {
@@ -609,10 +779,43 @@ toggleTraceBtn.addEventListener('click', () => {
     toggleTrace();
 });
 
+toggleConfigBtn.addEventListener('click', () => {
+    toggleConfig();
+});
+
+loadConfigBtn.addEventListener('click', () => {
+    loadConfig();
+});
+
+saveConfigBtn.addEventListener('click', () => {
+    saveConfig();
+});
+
+exportConfigBtn.addEventListener('click', () => {
+    exportConfig();
+});
+
+importConfigBtn.addEventListener('click', () => {
+    importConfigFile.click();
+});
+
+importConfigFile.addEventListener('change', event => {
+    const file = event.target.files?.[0];
+    if (file) {
+        importConfigFromFile(file);
+    }
+    importConfigFile.value = '';
+});
+
+addFlowStepBtn.addEventListener('click', () => {
+    addFlowStep();
+});
+
 (async function init() {
     setStreamStatus('disconnected');
     await refreshChannels();
     await loadRecent();
     await loadSummary();
+    await loadConfig();
     connectStream();
 })();

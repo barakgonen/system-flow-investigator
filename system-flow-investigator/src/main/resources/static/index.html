@@ -63,6 +63,54 @@
             </div>
         </section>
 
+        <section id="flowConfigPanel" class="panel config-panel">
+            <div class="panel-header">
+                <h2>Investigation Flow Config</h2>
+                <button id="toggleConfigBtn" class="secondary-button">Collapse</button>
+            </div>
+
+            <div id="configBody" class="collapsible-body">
+                <div class="config-actions">
+                    <button id="loadConfigBtn">Load Config</button>
+                    <button id="saveConfigBtn">Save Config</button>
+                    <button id="exportConfigBtn">Export JSON</button>
+                    <button id="importConfigBtn">Import JSON</button>
+                    <input id="importConfigFile" type="file" accept="application/json" hidden>
+                </div>
+
+                <div class="config-grid">
+                    <label>
+                        Name
+                        <input id="configNameInput" type="text" placeholder="Main Lab Flow">
+                    </label>
+
+                    <label>
+                        Max Step Duration Ms
+                        <input id="maxStepDurationInput" type="number" min="0" placeholder="50">
+                    </label>
+
+                    <label class="checkbox-label">
+                        <input id="allowExtraEventsInput" type="checkbox">
+                        Allow Extra Events
+                    </label>
+                </div>
+
+                <label class="config-description">
+                    Description
+                    <textarea id="configDescriptionInput" placeholder="Describe what this flow validates"></textarea>
+                </label>
+
+                <div class="config-steps-header">
+                    <h3>Expected Flow Steps</h3>
+                    <button id="addFlowStepBtn" class="secondary-button">Add Step</button>
+                </div>
+
+                <div id="flowStepsEditor" class="flow-steps-editor"></div>
+
+                <div id="configMessage" class="config-message"></div>
+            </div>
+        </section>
+
         <section id="liveEventsPanel" class="panel table-panel">
             <div class="panel-header">
                 <h2>Live Events</h2>
@@ -117,9 +165,7 @@
                 </div>
 
                 <div id="flowStatus" class="flow-status hidden"></div>
-
                 <div id="flowGraph" class="flow-graph hidden"></div>
-
                 <div id="traceTimeline" class="trace-timeline"></div>
             </div>
         </section>

@@ -9,6 +9,7 @@
     --accent-2: #7ef0c4;
     --danger: #ff7b7b;
     --ok: #7ef0c4;
+    --warning: #ffd166;
     --shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
     --radius: 18px;
 }
@@ -102,13 +103,18 @@ body {
     align-items: center;
 }
 
-input, button {
+input, button, textarea, select {
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--text);
     border-radius: 14px;
     padding: 10px 14px;
     font-size: 14px;
+}
+
+textarea {
+    min-height: 82px;
+    resize: vertical;
 }
 
 button {
@@ -129,12 +135,6 @@ button:disabled {
 
 .secondary-button {
     background: var(--panel-2);
-}
-
-.panel-actions {
-    display: flex;
-    gap: 10px;
-    align-items: center;
 }
 
 .status-badge {
@@ -211,10 +211,9 @@ button:disabled {
     font-size: 28px;
 }
 
-.content-grid {
-    display: grid;
-    grid-template-columns: 1.65fr 1fr;
-    gap: 18px;
+.config-panel,
+.table-panel,
+.trace-panel {
     margin-bottom: 18px;
 }
 
@@ -222,12 +221,98 @@ button:disabled {
     min-height: 620px;
 }
 
-.table-panel.panel-collapsed {
+.table-panel.panel-collapsed,
+.config-panel.panel-collapsed,
+.trace-panel.panel-collapsed {
     min-height: unset;
 }
 
-.trace-panel.panel-collapsed {
-    margin-bottom: 18px;
+.config-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 220px 220px;
+    gap: 14px;
+    padding: 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.config-grid label,
+.config-description {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.checkbox-label {
+    justify-content: center;
+    flex-direction: row !important;
+    align-items: center;
+}
+
+.config-description {
+    padding: 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.config-steps-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.config-steps-header h3 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.flow-steps-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.flow-step-row {
+    display: grid;
+    grid-template-columns: 44px 110px minmax(220px, 1fr) minmax(220px, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.step-index {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: rgba(110, 168, 254, 0.14);
+    color: var(--accent);
+    font-weight: 800;
+}
+
+.config-message {
+    padding: 14px 18px;
+    color: var(--muted);
+}
+
+.config-message.ok {
+    color: var(--ok);
+}
+
+.config-message.error {
+    color: var(--danger);
 }
 
 .table-wrapper {
@@ -271,16 +356,6 @@ tbody tr:hover {
     color: var(--muted);
 }
 
-#eventDetails {
-    margin: 0;
-    padding: 18px;
-    font-size: 13px;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: #dce7ff;
-}
-
 .topics-list {
     display: flex;
     flex-direction: column;
@@ -308,7 +383,7 @@ tbody tr:hover {
 .collapsible-body {
     overflow: hidden;
     transition: max-height 0.25s ease, opacity 0.2s ease;
-    max-height: 1800px;
+    max-height: 2400px;
     opacity: 1;
 }
 
@@ -318,8 +393,54 @@ tbody tr:hover {
     pointer-events: none;
 }
 
-.trace-panel {
-    margin-bottom: 18px;
+.live-events-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.live-events-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.85fr);
+    min-height: 560px;
+}
+
+.live-events-layout .table-wrapper {
+    max-height: 620px;
+    overflow: auto;
+    border-right: 1px solid var(--border);
+}
+
+.event-details-side {
+    min-width: 0;
+    background: rgba(10, 16, 30, 0.28);
+}
+
+.event-details-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.event-details-header h3 {
+    margin: 0;
+    font-size: 15px;
+}
+
+#eventDetails {
+    margin: 0;
+    padding: 18px;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #dce7ff;
+    max-height: 560px;
+    overflow: auto;
+}
+
+.selected-row {
+    background: rgba(110, 168, 254, 0.16);
 }
 
 .trace-controls {
@@ -425,56 +546,6 @@ tbody tr:hover {
     overflow: auto;
 }
 
-.live-events-actions {
-    display: flex;
-    justify-content: flex-end;
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--border);
-}
-
-.live-events-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(360px, 0.85fr);
-    min-height: 560px;
-}
-
-.live-events-layout .table-wrapper {
-    max-height: 620px;
-    overflow: auto;
-    border-right: 1px solid var(--border);
-}
-
-.event-details-side {
-    min-width: 0;
-    background: rgba(10, 16, 30, 0.28);
-}
-
-.event-details-header {
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--border);
-}
-
-.event-details-header h3 {
-    margin: 0;
-    font-size: 15px;
-}
-
-#eventDetails {
-    margin: 0;
-    padding: 18px;
-    font-size: 13px;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: #dce7ff;
-    max-height: 560px;
-    overflow: auto;
-}
-
-.selected-row {
-    background: rgba(110, 168, 254, 0.16);
-}
-
 .hidden {
     display: none !important;
 }
@@ -499,6 +570,11 @@ tbody tr:hover {
 .flow-status.flow-ok {
     background: rgba(126, 240, 196, 0.07);
     border-color: rgba(126, 240, 196, 0.22);
+}
+
+.flow-status.flow-warning {
+    background: rgba(255, 209, 102, 0.08);
+    border-color: rgba(255, 209, 102, 0.25);
 }
 
 .flow-status.flow-broken {
@@ -584,10 +660,6 @@ tbody tr:hover {
 }
 
 @media (max-width: 1200px) {
-    .content-grid {
-        grid-template-columns: 1fr;
-    }
-
     .app-shell {
         grid-template-columns: 1fr;
     }
@@ -599,6 +671,14 @@ tbody tr:hover {
 
     .stats-grid {
         grid-template-columns: 1fr;
+    }
+
+    .config-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .flow-step-row {
+        grid-template-columns: 44px 1fr;
     }
 
     .live-events-layout {
