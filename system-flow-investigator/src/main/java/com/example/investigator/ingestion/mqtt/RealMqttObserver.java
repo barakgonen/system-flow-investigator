@@ -48,7 +48,7 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
                             @Value("${mqtt.host:localhost}") String defaultHost,
                             @Value("${mqtt.port:1883}") int defaultPort,
                             @Value("${mqtt.client-id-prefix:system-flow-investigator}") String defaultClientIdPrefix,
-                            @Value("${mqtt.topic-filter:lab/flow/#}") String initialTopicFilter,
+                            @Value("${mqtt.topic-filter:#}") String initialTopicFilter,
                             @Value("${mqtt.persist-by-default:false}") boolean persistByDefault) {
         this.pipeline = pipeline;
         this.traceIdExtractor = traceIdExtractor;

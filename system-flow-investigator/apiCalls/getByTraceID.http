@@ -1,4 +1,4 @@
-@traceId = e4dcce9e-2e5f-4184-be10-d67085cbf57d
+@traceId = f0011333-cf92-4b9f-ba39-e1eaaee35b10
 
 ### Get Correlation Trace
 GET http://localhost:8080/api/correlation/trace/{{traceId}}

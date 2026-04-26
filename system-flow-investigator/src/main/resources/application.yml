@@ -4,8 +4,17 @@ server:
 spring:
   application:
     name: flow-investigator
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
 
 logging:
   level:
     root: INFO
     com.example.investigator: DEBUG
+mqtt:
+  host: localhost
+  port: 1883
+  client-id-prefix: system-flow-investigator
+  topic-filter: "#"
+  persist-by-default: false

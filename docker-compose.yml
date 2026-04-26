@@ -64,4 +64,4 @@ services:
 #    environment:
 #      MQTT_HOST: emqx
 #      MQTT_PORT: 1883
-#      MQTT_TOPIC_FILTER: lab/flow/#
+#      MQTT_TOPIC_FILTER: #
