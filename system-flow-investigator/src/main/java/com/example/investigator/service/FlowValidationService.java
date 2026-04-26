@@ -1,16 +1,10 @@
 package com.example.investigator.service;
 
 import com.example.investigator.domain.CorrelatedEvent;
-import com.example.investigator.domain.config.ExpectedFlowStep;
-import com.example.investigator.domain.config.ExpectedFlowStepResult;
-import com.example.investigator.domain.config.FlowValidationResult;
-import com.example.investigator.domain.config.InvestigationConfig;
+import com.example.investigator.domain.config.*;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 @Service
 public class FlowValidationService {
@@ -21,13 +15,19 @@ public class FlowValidationService {
         this.configService = configService;
     }
 
-    public FlowValidationResult validate(List<CorrelatedEvent> events) {
+    public FlowValidationResult validate(List<CorrelatedEvent> events, String flowId) {
+        if (flowId == null || flowId.isBlank()) {
+            return null;
+        }
+
         InvestigationConfig config = configService.getConfig();
 
-        if (config.steps() == null || config.steps().isEmpty()) {
+        FlowDefinition flow = findFlow(config, flowId);
+
+        if (flow == null) {
             return new FlowValidationResult(
                     "NO_CONFIG",
-                    "No expected flow steps configured.",
+                    "Flow configuration was not found: " + flowId,
                     List.of(),
                     List.of(),
                     extractExtraChannels(events, List.of()),
@@ -35,8 +35,19 @@ public class FlowValidationService {
             );
         }
 
-        List<ExpectedFlowStep> expectedSteps = config.steps().stream()
-                .sorted((a, b) -> Integer.compare(a.index(), b.index()))
+        if (flow.steps() == null || flow.steps().isEmpty()) {
+            return new FlowValidationResult(
+                    "NO_CONFIG",
+                    "Flow has no expected steps configured: " + flowId,
+                    List.of(),
+                    List.of(),
+                    extractExtraChannels(events, List.of()),
+                    null
+            );
+        }
+
+        List<ExpectedFlowStep> expectedSteps = flow.steps().stream()
+                .sorted(Comparator.comparingInt(ExpectedFlowStep::index))
                 .toList();
 
         List<ExpectedFlowStepResult> stepResults = new ArrayList<>();
@@ -78,16 +89,19 @@ public class FlowValidationService {
 
         List<String> extraChannels = extractExtraChannels(events, expectedSteps);
 
+        FlowValidationRules rules = config.rules() == null
+                ? new FlowValidationRules(50, true)
+                : config.rules();
+
         String status;
         String message;
 
         if (firstMissingIndex == -1) {
-            status = "COMPLETE";
-
-            if (!extraChannels.isEmpty() && !config.rules().allowExtraEvents()) {
+            if (!extraChannels.isEmpty() && !rules.allowExtraEvents()) {
                 status = "COMPLETE_WITH_UNEXPECTED_EVENTS";
                 message = "Flow completed, but unexpected channels were observed.";
             } else {
+                status = "COMPLETE";
                 message = "Flow completed successfully.";
             }
         } else if (firstMissingIndex == 0) {
@@ -111,6 +125,17 @@ public class FlowValidationService {
         );
     }
 
+    private FlowDefinition findFlow(InvestigationConfig config, String flowId) {
+        if (config == null || config.flows() == null) {
+            return null;
+        }
+
+        return config.flows().stream()
+                .filter(flow -> Objects.equals(flowId, flow.id()))
+                .findFirst()
+                .orElse(null);
+    }
+
     private boolean matches(ExpectedFlowStep step, CorrelatedEvent event) {
         boolean protocolMatches = step.protocol() == null
                 || step.protocol().isBlank()
@@ -124,11 +149,13 @@ public class FlowValidationService {
 
     private List<String> extractExtraChannels(List<CorrelatedEvent> events, List<ExpectedFlowStep> expectedSteps) {
         Set<String> expectedChannels = new LinkedHashSet<>();
+
         for (ExpectedFlowStep step : expectedSteps) {
             expectedChannels.add(step.channel());
         }
 
         Set<String> extra = new LinkedHashSet<>();
+
         for (CorrelatedEvent event : events) {
             if (!expectedChannels.contains(event.channel())) {
                 extra.add(event.channel());

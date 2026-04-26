@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class MqttClientFactoryTest {
+class MqttClientFactoryTests {
 
     private final MqttClientFactory factory = new MqttClientFactory();
 

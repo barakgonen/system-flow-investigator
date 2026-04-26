@@ -24,6 +24,16 @@ class FlowValidationServiceTests {
     }
 
     @Test
+    void shouldReturnNullWhenFlowIdIsMissing() {
+        FlowValidationResult result = service.validate(List.of(
+                event("MQTT", "lab/flow/in", null)
+        ), null);
+
+        assertThat(result).isNull();
+        verifyNoInteractions(configService);
+    }
+
+    @Test
     void shouldReturnCompleteWhenAllExpectedStepsFound() {
         when(configService.getConfig()).thenReturn(defaultConfig(true));
 
@@ -31,7 +41,7 @@ class FlowValidationServiceTests {
                 event("MQTT", "lab/flow/in", null),
                 event("MQTT", "lab/flow/out", 5L),
                 event("WS", "ws/live/out", 3L)
-        ));
+        ), "main-lab-flow");
 
         assertThat(result.status()).isEqualTo("COMPLETE");
         assertThat(result.missingChannels()).isEmpty();
@@ -42,13 +52,27 @@ class FlowValidationServiceTests {
     }
 
     @Test
+    void shouldReturnNoConfigWhenFlowIdDoesNotExist() {
+        when(configService.getConfig()).thenReturn(defaultConfig(true));
+
+        FlowValidationResult result = service.validate(List.of(
+                event("MQTT", "lab/flow/in", null)
+        ), "missing-flow");
+
+        assertThat(result.status()).isEqualTo("NO_CONFIG");
+        assertThat(result.message()).contains("missing-flow");
+        assertThat(result.steps()).isEmpty();
+        assertThat(result.extraChannels()).containsExactly("lab/flow/in");
+    }
+
+    @Test
     void shouldReturnBrokenWhenMiddleStepMissing() {
         when(configService.getConfig()).thenReturn(defaultConfig(true));
 
         FlowValidationResult result = service.validate(List.of(
                 event("MQTT", "lab/flow/in", null),
                 event("WS", "ws/live/out", 8L)
-        ));
+        ), "main-lab-flow");
 
         assertThat(result.status()).isEqualTo("BROKEN");
         assertThat(result.missingChannels()).containsExactly("lab/flow/out");
@@ -62,7 +86,7 @@ class FlowValidationServiceTests {
 
         FlowValidationResult result = service.validate(List.of(
                 event("MQTT", "lab/flow/out", null)
-        ));
+        ), "main-lab-flow");
 
         assertThat(result.status()).isEqualTo("BROKEN");
         assertThat(result.missingChannels()).contains("lab/flow/in", "ws/live/out");
@@ -78,7 +102,7 @@ class FlowValidationServiceTests {
                 event("MQTT", "lab/flow/out", 5L),
                 event("WS", "ws/live/out", 3L),
                 event("MQTT", "lab/flow/other", 1L)
-        ));
+        ), "main-lab-flow");
 
         assertThat(result.status()).isEqualTo("COMPLETE");
         assertThat(result.extraChannels()).containsExactly("lab/flow/other");
@@ -93,18 +117,25 @@ class FlowValidationServiceTests {
                 event("MQTT", "lab/flow/out", 5L),
                 event("WS", "ws/live/out", 3L),
                 event("MQTT", "lab/flow/other", 1L)
-        ));
+        ), "main-lab-flow");
 
         assertThat(result.status()).isEqualTo("COMPLETE_WITH_UNEXPECTED_EVENTS");
         assertThat(result.extraChannels()).containsExactly("lab/flow/other");
     }
 
     @Test
-    void shouldReturnNoConfigWhenStepsEmpty() {
+    void shouldReturnNoConfigWhenSelectedFlowHasNoSteps() {
         InvestigationConfig config = new InvestigationConfig(
                 "empty",
                 "empty",
-                List.of(),
+                List.of(
+                        new FlowDefinition(
+                                "empty-flow",
+                                "Empty Flow",
+                                "No steps",
+                                List.of()
+                        )
+                ),
                 new FlowValidationRules(50, true)
         );
 
@@ -112,21 +143,70 @@ class FlowValidationServiceTests {
 
         FlowValidationResult result = service.validate(List.of(
                 event("MQTT", "lab/flow/in", null)
-        ));
+        ), "empty-flow");
 
         assertThat(result.status()).isEqualTo("NO_CONFIG");
         assertThat(result.steps()).isEmpty();
         assertThat(result.extraChannels()).containsExactly("lab/flow/in");
     }
 
-    private InvestigationConfig defaultConfig(boolean allowExtraEvents) {
-        return new InvestigationConfig(
-                "Main Lab Flow",
+    @Test
+    void shouldValidateSelectedFlowOnly() {
+        InvestigationConfig config = new InvestigationConfig(
+                "Multi Flow Config",
                 "test",
                 List.of(
-                        new ExpectedFlowStep(1, "MQTT", "lab/flow/in", "Producer"),
-                        new ExpectedFlowStep(2, "MQTT", "lab/flow/out", "Consumer"),
-                        new ExpectedFlowStep(3, "WS", "ws/live/out", "WS")
+                        new FlowDefinition(
+                                "first-flow",
+                                "First Flow",
+                                "first",
+                                List.of(
+                                        new ExpectedFlowStep(1, "MQTT", "a/in", "A"),
+                                        new ExpectedFlowStep(2, "WS", "a/out", "B")
+                                )
+                        ),
+                        new FlowDefinition(
+                                "second-flow",
+                                "Second Flow",
+                                "second",
+                                List.of(
+                                        new ExpectedFlowStep(1, "MQTT", "b/in", "B"),
+                                        new ExpectedFlowStep(2, "MQTT", "b/out", "D")
+                                )
+                        )
+                ),
+                new FlowValidationRules(50, true)
+        );
+
+        when(configService.getConfig()).thenReturn(config);
+
+        FlowValidationResult result = service.validate(List.of(
+                event("MQTT", "b/in", null),
+                event("MQTT", "b/out", 4L)
+        ), "second-flow");
+
+        assertThat(result.status()).isEqualTo("COMPLETE");
+        assertThat(result.missingChannels()).isEmpty();
+        assertThat(result.extraChannels()).isEmpty();
+        assertThat(result.steps()).extracting(ExpectedFlowStepResult::channel)
+                .containsExactly("b/in", "b/out");
+    }
+
+    private InvestigationConfig defaultConfig(boolean allowExtraEvents) {
+        return new InvestigationConfig(
+                "Main Investigation",
+                "test",
+                List.of(
+                        new FlowDefinition(
+                                "main-lab-flow",
+                                "Main Lab Flow",
+                                "Producer to websocket flow",
+                                List.of(
+                                        new ExpectedFlowStep(1, "MQTT", "lab/flow/in", "Producer"),
+                                        new ExpectedFlowStep(2, "MQTT", "lab/flow/out", "Consumer"),
+                                        new ExpectedFlowStep(3, "WS", "ws/live/out", "WS")
+                                )
+                        )
                 ),
                 new FlowValidationRules(50, allowExtraEvents)
         );

@@ -13,7 +13,34 @@ import static org.mockito.Mockito.*;
 class CorrelationControllerTests {
 
     @Test
-    void shouldDelegateTraceLookupToService() {
+    void shouldDelegateTraceLookupToServiceWithoutFlowId() {
+        CorrelationService service = mock(CorrelationService.class);
+
+        FlowValidationResult validation = null;
+
+        TraceTimelineResponse response = new TraceTimelineResponse(
+                "trace-1",
+                0,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                validation
+        );
+
+        when(service.trace("trace-1", null)).thenReturn(response);
+
+        CorrelationController controller = new CorrelationController(service);
+
+        TraceTimelineResponse result = controller.trace("trace-1", null);
+
+        assertThat(result).isSameAs(response);
+        verify(service).trace("trace-1", null);
+    }
+
+    @Test
+    void shouldDelegateTraceLookupToServiceWithFlowId() {
         CorrelationService service = mock(CorrelationService.class);
 
         FlowValidationResult validation = new FlowValidationResult(
@@ -36,13 +63,13 @@ class CorrelationControllerTests {
                 validation
         );
 
-        when(service.trace("trace-1")).thenReturn(response);
+        when(service.trace("trace-1", "main-lab-flow")).thenReturn(response);
 
         CorrelationController controller = new CorrelationController(service);
 
-        TraceTimelineResponse result = controller.trace("trace-1");
+        TraceTimelineResponse result = controller.trace("trace-1", "main-lab-flow");
 
         assertThat(result).isSameAs(response);
-        verify(service).trace("trace-1");
+        verify(service).trace("trace-1", "main-lab-flow");
     }
 }

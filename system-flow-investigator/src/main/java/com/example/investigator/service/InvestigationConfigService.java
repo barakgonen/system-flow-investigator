@@ -1,8 +1,6 @@
 package com.example.investigator.service;
 
-import com.example.investigator.domain.config.ExpectedFlowStep;
-import com.example.investigator.domain.config.FlowValidationRules;
-import com.example.investigator.domain.config.InvestigationConfig;
+import com.example.investigator.domain.config.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.stereotype.Service;
@@ -46,12 +44,19 @@ public class InvestigationConfigService {
 
     private InvestigationConfig defaultConfig() {
         return new InvestigationConfig(
-                "Main Lab Flow",
-                "Producer to consumer-producer to websocket delivery",
+                "Default Investigation",
+                "Default validation flows",
                 List.of(
-                        new ExpectedFlowStep(1, "MQTT", "lab/flow/in", "Producer published"),
-                        new ExpectedFlowStep(2, "MQTT", "lab/flow/out", "Consumer-producer forwarded"),
-                        new ExpectedFlowStep(3, "WS", "ws/live/out", "WebSocket delivered")
+                        new FlowDefinition(
+                                "main-lab-flow",
+                                "Main Lab Flow",
+                                "Producer to consumer-producer to websocket delivery",
+                                List.of(
+                                        new ExpectedFlowStep(1, "MQTT", "lab/flow/in", "Producer published"),
+                                        new ExpectedFlowStep(2, "MQTT", "lab/flow/out", "Consumer-producer forwarded"),
+                                        new ExpectedFlowStep(3, "WS", "ws/live/out", "WebSocket delivered")
+                                )
+                        )
                 ),
                 new FlowValidationRules(50, true)
         );

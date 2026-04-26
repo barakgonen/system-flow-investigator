@@ -39,9 +39,23 @@ class InvestigationConfigControllerTests {
 
     private InvestigationConfig config() {
         return new InvestigationConfig(
-                "Main Lab Flow",
+                "Main Investigation",
                 "desc",
-                List.of(new ExpectedFlowStep(1, "MQTT", "lab/flow/in", "Producer")),
+                List.of(
+                        new FlowDefinition(
+                                "main-lab-flow",
+                                "Main Lab Flow",
+                                "Producer to websocket flow",
+                                List.of(
+                                        new ExpectedFlowStep(
+                                                1,
+                                                "MQTT",
+                                                "lab/flow/in",
+                                                "Producer"
+                                        )
+                                )
+                        )
+                ),
                 new FlowValidationRules(50, true)
         );
     }

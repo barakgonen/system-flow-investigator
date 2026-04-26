@@ -1,6 +1,6 @@
 @traceId = f0011333-cf92-4b9f-ba39-e1eaaee35b10
 
 ### Expecting to get validation null since we dont pass validation in the request
-### Get Correlation Trace
-GET http://localhost:8080/api/correlation/trace/{{traceId}}
+
+GET http://localhost:8080/api/correlation/trace/YOUR_TRACE_ID?flowId=main-lab-flow
 Accept: application/json

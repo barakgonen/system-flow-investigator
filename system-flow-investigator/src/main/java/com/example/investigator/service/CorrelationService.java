@@ -27,13 +27,17 @@ public class CorrelationService {
     }
 
     public TraceTimelineResponse trace(String traceId) {
+        return trace(traceId, null);
+    }
+
+    public TraceTimelineResponse trace(String traceId, String flowId) {
         List<ObservedEvent> matchingEvents = recentEventStore.getAllRecent().stream()
                 .filter(event -> Objects.equals(traceId, event.traceId()))
                 .sorted(eventComparator())
                 .toList();
 
         if (matchingEvents.isEmpty()) {
-            FlowValidationResult validation = flowValidationService.validate(List.of());
+            FlowValidationResult validation = flowValidationService.validate(List.of(), flowId);
 
             return new TraceTimelineResponse(
                     traceId,
@@ -48,7 +52,6 @@ public class CorrelationService {
         }
 
         AtomicInteger index = new AtomicInteger(1);
-
         List<CorrelatedEvent> correlatedEvents = buildCorrelatedEvents(matchingEvents, index);
 
         Instant startedAt = firstNonNullSourceOrObserved(matchingEvents.get(0));
@@ -62,7 +65,7 @@ public class CorrelationService {
         Long totalSourceDurationMs = calculateTotalSourceDuration(matchingEvents);
         Long totalObservedDurationMs = calculateTotalObservedDuration(matchingEvents);
 
-        FlowValidationResult validation = flowValidationService.validate(correlatedEvents);
+        FlowValidationResult validation = flowValidationService.validate(correlatedEvents, flowId);
 
         return new TraceTimelineResponse(
                 traceId,
@@ -163,6 +166,7 @@ public class CorrelationService {
         if (from == null || to == null) {
             return null;
         }
+
         return Duration.between(from, to).toMillis();
     }
 }
