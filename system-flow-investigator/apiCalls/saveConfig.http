@@ -1,0 +1,32 @@
+### Save investigation config
+PUT http://localhost:8080/api/investigation/config
+Content-Type: application/json
+
+{
+  "name": "Main Lab Flow",
+  "description": "Producer to consumer-producer to websocket delivery",
+  "steps": [
+    {
+      "index": 1,
+      "protocol": "MQTT",
+      "channel": "lab/flow/in",
+      "label": "Producer published"
+    },
+    {
+      "index": 2,
+      "protocol": "MQTT",
+      "channel": "lab/flow/out",
+      "label": "Consumer-producer forwarded"
+    },
+    {
+      "index": 3,
+      "protocol": "WS",
+      "channel": "ws/live/out",
+      "label": "WebSocket delivered"
+    }
+  ],
+  "rules": {
+    "maxStepDurationMs": 50,
+    "allowExtraEvents": true
+  }
+}

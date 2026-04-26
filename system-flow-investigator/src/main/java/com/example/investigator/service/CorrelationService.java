@@ -3,6 +3,7 @@ package com.example.investigator.service;
 import com.example.investigator.domain.CorrelatedEvent;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.TraceTimelineResponse;
+import com.example.investigator.domain.config.FlowValidationResult;
 import com.example.investigator.storage.RecentEventStore;
 import org.springframework.stereotype.Service;
 
@@ -17,9 +18,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CorrelationService {
 
     private final RecentEventStore recentEventStore;
+    private final FlowValidationService flowValidationService;
 
-    public CorrelationService(RecentEventStore recentEventStore) {
+    public CorrelationService(RecentEventStore recentEventStore,
+                              FlowValidationService flowValidationService) {
         this.recentEventStore = recentEventStore;
+        this.flowValidationService = flowValidationService;
     }
 
     public TraceTimelineResponse trace(String traceId) {
@@ -29,6 +33,8 @@ public class CorrelationService {
                 .toList();
 
         if (matchingEvents.isEmpty()) {
+            FlowValidationResult validation = flowValidationService.validate(List.of());
+
             return new TraceTimelineResponse(
                     traceId,
                     0,
@@ -36,7 +42,8 @@ public class CorrelationService {
                     null,
                     null,
                     null,
-                    List.of()
+                    List.of(),
+                    validation
             );
         }
 
@@ -45,6 +52,7 @@ public class CorrelationService {
         List<CorrelatedEvent> correlatedEvents = buildCorrelatedEvents(matchingEvents, index);
 
         Instant startedAt = firstNonNullSourceOrObserved(matchingEvents.get(0));
+
         Instant lastObservedAt = matchingEvents.stream()
                 .map(ObservedEvent::observedAt)
                 .filter(Objects::nonNull)
@@ -54,6 +62,8 @@ public class CorrelationService {
         Long totalSourceDurationMs = calculateTotalSourceDuration(matchingEvents);
         Long totalObservedDurationMs = calculateTotalObservedDuration(matchingEvents);
 
+        FlowValidationResult validation = flowValidationService.validate(correlatedEvents);
+
         return new TraceTimelineResponse(
                 traceId,
                 correlatedEvents.size(),
@@ -61,7 +71,8 @@ public class CorrelationService {
                 lastObservedAt,
                 totalSourceDurationMs,
                 totalObservedDurationMs,
-                correlatedEvents
+                correlatedEvents,
+                validation
         );
     }
 

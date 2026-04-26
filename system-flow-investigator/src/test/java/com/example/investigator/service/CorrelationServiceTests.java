@@ -2,6 +2,7 @@ package com.example.investigator.service;
 
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.TraceTimelineResponse;
+import com.example.investigator.domain.config.FlowValidationResult;
 import com.example.investigator.storage.RecentEventStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,16 +12,32 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class CorrelationServiceTests {
 
     private RecentEventStore store;
+    private FlowValidationService flowValidationService;
     private CorrelationService service;
 
     @BeforeEach
     void setUp() {
         store = new RecentEventStore();
-        service = new CorrelationService(store);
+        flowValidationService = mock(FlowValidationService.class);
+
+        when(flowValidationService.validate(anyList()))
+                .thenReturn(new FlowValidationResult(
+                        "COMPLETE",
+                        "Flow completed successfully.",
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        "ws/live/out"
+                ));
+
+        service = new CorrelationService(store, flowValidationService);
     }
 
     @Test
@@ -34,6 +51,9 @@ class CorrelationServiceTests {
         assertThat(response.lastObservedAt()).isNull();
         assertThat(response.totalSourceDurationMs()).isNull();
         assertThat(response.totalObservedDurationMs()).isNull();
+
+        assertThat(response.validation()).isNotNull();
+        assertThat(response.validation().status()).isEqualTo("COMPLETE");
     }
 
     @Test
@@ -71,6 +91,9 @@ class CorrelationServiceTests {
 
         assertThat(response.events().get(2).deltaFromPreviousSourceMs()).isEqualTo(4_000);
         assertThat(response.events().get(2).deltaFromPreviousObservedMs()).isEqualTo(5_000);
+
+        assertThat(response.validation()).isNotNull();
+        assertThat(response.validation().status()).isEqualTo("COMPLETE");
     }
 
     @Test
@@ -90,6 +113,7 @@ class CorrelationServiceTests {
         assertThat(response.events().get(1).deltaFromPreviousObservedMs()).isEqualTo(3_000);
         assertThat(response.totalSourceDurationMs()).isEqualTo(3_000);
         assertThat(response.totalObservedDurationMs()).isEqualTo(3_000);
+        assertThat(response.validation()).isNotNull();
     }
 
     @Test
@@ -106,6 +130,7 @@ class CorrelationServiceTests {
 
         assertThat(response.events()).hasSize(1);
         assertThat(response.events().get(0).channel()).isEqualTo("lab/flow/in");
+        assertThat(response.validation()).isNotNull();
     }
 
     @Test
@@ -121,6 +146,7 @@ class CorrelationServiceTests {
         assertThat(response.totalObservedDurationMs()).isEqualTo(0);
         assertThat(response.events().get(0).deltaFromPreviousSourceMs()).isNull();
         assertThat(response.events().get(0).deltaFromPreviousObservedMs()).isNull();
+        assertThat(response.validation()).isNotNull();
     }
 
     private ObservedEvent event(String protocol,
