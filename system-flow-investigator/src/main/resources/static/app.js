@@ -24,6 +24,28 @@ const toggleTraceBtn = document.getElementById('toggleTraceBtn');
 const traceBody = document.getElementById('traceBody');
 const liveEventsPanel = document.getElementById('liveEventsPanel');
 const tracePanel = document.getElementById('tracePanel');
+const flowStatus = document.getElementById('flowStatus');
+const flowGraph = document.getElementById('flowGraph');
+
+const EXPECTED_FLOW = [
+    {
+        channel: 'lab/flow/in',
+        label: 'Producer',
+        protocol: 'MQTT'
+    },
+    {
+        channel: 'lab/flow/out',
+        label: 'Consumer → Producer',
+        protocol: 'MQTT'
+    },
+    {
+        channel: 'ws/live/out',
+        label: 'UI Delivery',
+        protocol: 'WS'
+    }
+];
+
+const SLOW_STEP_THRESHOLD_MS = 50;
 
 let eventSource = null;
 let cachedEvents = [];
@@ -173,6 +195,7 @@ function renderEvents(events) {
 
             if (event.traceId) {
                 traceIdInput.value = event.traceId;
+                inspectTrace();
             }
         };
 
@@ -342,6 +365,8 @@ async function inspectTrace() {
     if (!traceId) {
         traceSummary.textContent = 'Please enter a traceId.';
         traceTimeline.innerHTML = '';
+        flowStatus.classList.add('hidden');
+        flowGraph.classList.add('hidden');
         return;
     }
 
@@ -352,6 +377,8 @@ async function inspectTrace() {
         console.error('Failed loading trace', e);
         traceSummary.textContent = 'Failed loading trace.';
         traceTimeline.innerHTML = '';
+        flowStatus.classList.add('hidden');
+        flowGraph.classList.add('hidden');
     }
 }
 
@@ -360,8 +387,12 @@ function renderTrace(trace) {
 
     if (!trace.events || trace.events.length === 0) {
         traceSummary.innerHTML = `<strong>${escapeHtml(trace.traceId || '-')}</strong> | no events found`;
+        flowStatus.classList.add('hidden');
+        flowGraph.classList.add('hidden');
         return;
     }
+
+    const flowAnalysis = analyzeFlow(trace.events);
 
     traceSummary.innerHTML = `
         <strong>${escapeHtml(trace.traceId || '-')}</strong>
@@ -370,9 +401,16 @@ function renderTrace(trace) {
         <span>Observed duration: ${formatDuration(trace.totalObservedDurationMs)}</span>
     `;
 
+    renderFlowStatus(flowAnalysis);
+    renderFlowGraph(trace.events, flowAnalysis);
+
     for (const event of trace.events) {
         const item = document.createElement('div');
         item.className = 'trace-step';
+
+        if ((event.deltaFromPreviousSourceMs ?? 0) > SLOW_STEP_THRESHOLD_MS) {
+            item.classList.add('slow-step');
+        }
 
         item.innerHTML = `
             <div class="trace-index">${escapeHtml(event.index ?? '-')}</div>
@@ -399,6 +437,117 @@ function renderTrace(trace) {
         `;
 
         traceTimeline.appendChild(item);
+    }
+}
+
+function analyzeFlow(events) {
+    const channels = new Set(events.map(event => event.channel));
+
+    const steps = EXPECTED_FLOW.map(expected => {
+        const event = events.find(candidate => candidate.channel === expected.channel);
+
+        return {
+            ...expected,
+            found: Boolean(event),
+            event
+        };
+    });
+
+    const firstMissingIndex = steps.findIndex(step => !step.found);
+    const missingSteps = steps.filter(step => !step.found);
+
+    let status = 'complete';
+    let message = 'Flow completed successfully.';
+
+    if (firstMissingIndex === 0) {
+        status = 'broken';
+        message = `Flow did not reach the first expected step: ${steps[0].channel}`;
+    } else if (firstMissingIndex > 0) {
+        const previousStep = steps[firstMissingIndex - 1];
+        const missingStep = steps[firstMissingIndex];
+
+        status = 'broken';
+        message = `Flow likely stopped after ${previousStep.channel}, before ${missingStep.channel}.`;
+    }
+
+    const extraEvents = events.filter(event =>
+        !EXPECTED_FLOW.some(expected => expected.channel === event.channel)
+    );
+
+    return {
+        status,
+        message,
+        steps,
+        missingSteps,
+        extraEvents,
+        channels
+    };
+}
+
+function renderFlowStatus(analysis) {
+    flowStatus.classList.remove('hidden', 'flow-ok', 'flow-broken', 'flow-warning');
+
+    if (analysis.status === 'complete') {
+        flowStatus.classList.add('flow-ok');
+    } else {
+        flowStatus.classList.add('flow-broken');
+    }
+
+    const missingText = analysis.missingSteps.length > 0
+        ? `Missing: ${analysis.missingSteps.map(step => step.channel).join(', ')}`
+        : 'No missing expected steps.';
+
+    const extraText = analysis.extraEvents.length > 0
+        ? `Extra observed: ${analysis.extraEvents.map(event => event.channel).join(', ')}`
+        : '';
+
+    flowStatus.innerHTML = `
+        <strong>${analysis.status === 'complete' ? '✅ Complete flow' : '❌ Broken flow'}</strong>
+        <span>${escapeHtml(analysis.message)}</span>
+        <small>${escapeHtml(missingText)}</small>
+        ${extraText ? `<small>${escapeHtml(extraText)}</small>` : ''}
+    `;
+}
+
+function renderFlowGraph(events, analysis) {
+    flowGraph.classList.remove('hidden');
+    flowGraph.innerHTML = '';
+
+    analysis.steps.forEach((step, index) => {
+        const node = document.createElement('div');
+        node.className = `flow-node ${step.found ? 'found' : 'missing'}`;
+
+        const sourceDelta = step.event?.deltaFromPreviousSourceMs;
+        const observedDelta = step.event?.deltaFromPreviousObservedMs;
+
+        node.innerHTML = `
+            <div class="flow-node-label">${escapeHtml(step.label)}</div>
+            <div class="flow-node-channel">${escapeHtml(step.channel)}</div>
+            <div class="flow-node-protocol">${escapeHtml(step.protocol)}</div>
+            <div class="flow-node-time">
+                ${step.found ? `Δ ${formatDuration(sourceDelta)}` : 'Missing'}
+            </div>
+            ${step.found ? `<div class="flow-node-observed">obs Δ ${formatDuration(observedDelta)}</div>` : ''}
+        `;
+
+        flowGraph.appendChild(node);
+
+        if (index < analysis.steps.length - 1) {
+            const arrow = document.createElement('div');
+            arrow.className = `flow-arrow ${step.found && analysis.steps[index + 1].found ? 'connected' : 'broken'}`;
+            arrow.innerHTML = '→';
+            flowGraph.appendChild(arrow);
+        }
+    });
+
+    if (analysis.extraEvents.length > 0) {
+        const extra = document.createElement('div');
+        extra.className = 'flow-extra';
+        extra.innerHTML = `
+            <strong>Extra observed channels</strong>
+            <span>${escapeHtml(analysis.extraEvents.map(event => event.channel).join(', '))}</span>
+        `;
+        flowGraph.appendChild(extra);
     }
 }
 

@@ -308,7 +308,7 @@ tbody tr:hover {
 .collapsible-body {
     overflow: hidden;
     transition: max-height 0.25s ease, opacity 0.2s ease;
-    max-height: 1400px;
+    max-height: 1800px;
     opacity: 1;
 }
 
@@ -361,6 +361,11 @@ tbody tr:hover {
     border: 1px solid var(--border);
     border-radius: 14px;
     padding: 14px;
+}
+
+.trace-step.slow-step {
+    border-color: rgba(255, 123, 123, 0.55);
+    background: rgba(255, 123, 123, 0.08);
 }
 
 .trace-index {
@@ -420,25 +425,6 @@ tbody tr:hover {
     overflow: auto;
 }
 
-@media (max-width: 1200px) {
-    .content-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .app-shell {
-        grid-template-columns: 1fr;
-    }
-
-    .sidebar {
-        border-right: 0;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .stats-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
 .live-events-actions {
     display: flex;
     justify-content: flex-end;
@@ -489,7 +475,132 @@ tbody tr:hover {
     background: rgba(110, 168, 254, 0.16);
 }
 
+.hidden {
+    display: none !important;
+}
+
+.flow-status {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.flow-status strong {
+    font-size: 15px;
+}
+
+.flow-status span,
+.flow-status small {
+    color: var(--muted);
+}
+
+.flow-status.flow-ok {
+    background: rgba(126, 240, 196, 0.07);
+    border-color: rgba(126, 240, 196, 0.22);
+}
+
+.flow-status.flow-broken {
+    background: rgba(255, 123, 123, 0.08);
+    border-color: rgba(255, 123, 123, 0.25);
+}
+
+.flow-graph {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    padding: 18px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+}
+
+.flow-node {
+    min-width: 190px;
+    border: 1px solid var(--border);
+    background: rgba(26, 35, 56, 0.72);
+    border-radius: 14px;
+    padding: 14px;
+}
+
+.flow-node.found {
+    border-color: rgba(126, 240, 196, 0.35);
+}
+
+.flow-node.missing {
+    border-color: rgba(255, 123, 123, 0.5);
+    background: rgba(255, 123, 123, 0.08);
+}
+
+.flow-node-label {
+    font-weight: 800;
+    margin-bottom: 6px;
+}
+
+.flow-node-channel {
+    color: var(--text);
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.flow-node-protocol,
+.flow-node-time,
+.flow-node-observed {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.flow-arrow {
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    font-size: 24px;
+    min-width: 28px;
+}
+
+.flow-arrow.connected {
+    color: var(--ok);
+}
+
+.flow-arrow.broken {
+    color: var(--danger);
+}
+
+.flow-extra {
+    min-width: 240px;
+    border: 1px dashed rgba(255, 255, 255, 0.22);
+    border-radius: 14px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.flow-extra span {
+    color: var(--muted);
+    font-size: 13px;
+}
+
 @media (max-width: 1200px) {
+    .content-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .app-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
     .live-events-layout {
         grid-template-columns: 1fr;
     }
@@ -497,5 +608,9 @@ tbody tr:hover {
     .live-events-layout .table-wrapper {
         border-right: 0;
         border-bottom: 1px solid var(--border);
+    }
+
+    .flow-graph {
+        align-items: stretch;
     }
 }
