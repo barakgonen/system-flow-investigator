@@ -63,54 +63,6 @@
             </div>
         </section>
 
-        <section id="flowConfigPanel" class="panel config-panel">
-            <div class="panel-header">
-                <h2>Investigation Flow Config</h2>
-                <button id="toggleConfigBtn" class="secondary-button">Collapse</button>
-            </div>
-
-            <div id="configBody" class="collapsible-body">
-                <div class="config-actions">
-                    <button id="loadConfigBtn">Load Config</button>
-                    <button id="saveConfigBtn">Save Config</button>
-                    <button id="exportConfigBtn">Export JSON</button>
-                    <button id="importConfigBtn">Import JSON</button>
-                    <input id="importConfigFile" type="file" accept="application/json" hidden>
-                </div>
-
-                <div class="config-grid">
-                    <label>
-                        Name
-                        <input id="configNameInput" type="text" placeholder="Main Lab Flow">
-                    </label>
-
-                    <label>
-                        Max Step Duration Ms
-                        <input id="maxStepDurationInput" type="number" min="0" placeholder="50">
-                    </label>
-
-                    <label class="checkbox-label">
-                        <input id="allowExtraEventsInput" type="checkbox">
-                        Allow Extra Events
-                    </label>
-                </div>
-
-                <label class="config-description">
-                    Description
-                    <textarea id="configDescriptionInput" placeholder="Describe what this flow validates"></textarea>
-                </label>
-
-                <div class="config-steps-header">
-                    <h3>Expected Flow Steps</h3>
-                    <button id="addFlowStepBtn" class="secondary-button">Add Step</button>
-                </div>
-
-                <div id="flowStepsEditor" class="flow-steps-editor"></div>
-
-                <div id="configMessage" class="config-message"></div>
-            </div>
-        </section>
-
         <section id="liveEventsPanel" class="panel table-panel">
             <div class="panel-header">
                 <h2>Live Events</h2>
@@ -148,6 +100,86 @@
             </div>
         </section>
 
+        <section id="flowConfigPanel" class="panel config-panel">
+            <div class="panel-header">
+                <h2>Investigation Flow Config</h2>
+                <button id="toggleConfigBtn" class="secondary-button">Collapse</button>
+            </div>
+
+            <div id="configBody" class="collapsible-body">
+                <div class="config-actions">
+                    <button id="loadConfigBtn">Load Config</button>
+                    <button id="saveConfigBtn">Save Config</button>
+                    <button id="exportConfigBtn">Export JSON</button>
+                    <button id="importConfigBtn">Import JSON</button>
+                    <input id="importConfigFile" type="file" accept="application/json" hidden>
+                </div>
+
+                <div class="config-grid">
+                    <label>
+                        Investigation Name
+                        <input id="configNameInput" type="text" placeholder="My Investigation">
+                    </label>
+
+                    <label>
+                        Max Step Duration Ms
+                        <input id="maxStepDurationInput" type="number" min="0" placeholder="50">
+                    </label>
+
+                    <label class="checkbox-label">
+                        <input id="allowExtraEventsInput" type="checkbox">
+                        Allow Extra Events
+                    </label>
+                </div>
+
+                <label class="config-description">
+                    Investigation Description
+                    <textarea id="configDescriptionInput" placeholder="Describe this investigation configuration"></textarea>
+                </label>
+
+                <div class="flow-manager-header">
+                    <div>
+                        <h3>Flows</h3>
+                        <p>Select a flow to edit its validation logic.</p>
+                    </div>
+
+                    <div class="flow-manager-actions">
+                        <select id="configFlowSelect"></select>
+                        <button id="addFlowBtn" class="secondary-button">Add Flow</button>
+                        <button id="removeFlowBtn" class="secondary-button">Remove Flow</button>
+                    </div>
+                </div>
+
+                <div id="selectedFlowEditor" class="selected-flow-editor">
+                    <div class="config-grid">
+                        <label>
+                            Flow ID
+                            <input id="flowIdInput" type="text" placeholder="main-lab-flow">
+                        </label>
+
+                        <label>
+                            Flow Name
+                            <input id="flowNameInput" type="text" placeholder="Main Lab Flow">
+                        </label>
+                    </div>
+
+                    <label class="config-description">
+                        Flow Description
+                        <textarea id="flowDescriptionInput" placeholder="Describe this specific flow"></textarea>
+                    </label>
+
+                    <div class="config-steps-header">
+                        <h3>Expected Flow Steps</h3>
+                        <button id="addFlowStepBtn" class="secondary-button">Add Step</button>
+                    </div>
+
+                    <div id="flowStepsEditor" class="flow-steps-editor"></div>
+                </div>
+
+                <div id="configMessage" class="config-message"></div>
+            </div>
+        </section>
+
         <section id="tracePanel" class="panel trace-panel">
             <div class="panel-header">
                 <h2>Trace Timeline</h2>
@@ -157,6 +189,11 @@
             <div id="traceBody" class="collapsible-body">
                 <div class="trace-controls">
                     <input id="traceIdInput" type="text" placeholder="Paste traceId">
+
+                    <select id="traceFlowSelect">
+                        <option value="">No validation — show actual graph only</option>
+                    </select>
+
                     <button id="inspectTraceBtn">Inspect Trace</button>
                 </div>
 

@@ -263,17 +263,48 @@ button:disabled {
     border-bottom: 1px solid var(--border);
 }
 
+.flow-manager-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.flow-manager-header h3,
+.config-steps-header h3 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.flow-manager-header p {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.flow-manager-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.flow-manager-actions select {
+    min-width: 280px;
+}
+
+.selected-flow-editor {
+    border-bottom: 1px solid var(--border);
+}
+
 .config-steps-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 14px 18px;
     border-bottom: 1px solid var(--border);
-}
-
-.config-steps-header h3 {
-    margin: 0;
-    font-size: 15px;
 }
 
 .flow-steps-editor {
@@ -383,7 +414,7 @@ tbody tr:hover {
 .collapsible-body {
     overflow: hidden;
     transition: max-height 0.25s ease, opacity 0.2s ease;
-    max-height: 2400px;
+    max-height: 2600px;
     opacity: 1;
 }
 
@@ -444,14 +475,11 @@ tbody tr:hover {
 }
 
 .trace-controls {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(260px, 0.5fr) auto;
     gap: 10px;
     padding: 18px;
     border-bottom: 1px solid var(--border);
-}
-
-.trace-controls input {
-    flex: 1;
 }
 
 .trace-summary {
@@ -669,16 +697,29 @@ tbody tr:hover {
         border-bottom: 1px solid var(--border);
     }
 
-    .stats-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .config-grid {
+    .stats-grid,
+    .config-grid,
+    .trace-controls {
         grid-template-columns: 1fr;
     }
 
     .flow-step-row {
         grid-template-columns: 44px 1fr;
+    }
+
+    .flow-manager-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .flow-manager-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .flow-manager-actions select {
+        min-width: 0;
+        width: 100%;
     }
 
     .live-events-layout {
@@ -688,9 +729,5 @@ tbody tr:hover {
     .live-events-layout .table-wrapper {
         border-right: 0;
         border-bottom: 1px solid var(--border);
-    }
-
-    .flow-graph {
-        align-items: stretch;
     }
 }

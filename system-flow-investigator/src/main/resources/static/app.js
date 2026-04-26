@@ -18,6 +18,7 @@ const liveEventsBody = document.getElementById('liveEventsBody');
 const liveEventsPanel = document.getElementById('liveEventsPanel');
 
 const traceIdInput = document.getElementById('traceIdInput');
+const traceFlowSelect = document.getElementById('traceFlowSelect');
 const inspectTraceBtn = document.getElementById('inspectTraceBtn');
 const traceSummary = document.getElementById('traceSummary');
 const traceTimeline = document.getElementById('traceTimeline');
@@ -35,10 +36,20 @@ const saveConfigBtn = document.getElementById('saveConfigBtn');
 const exportConfigBtn = document.getElementById('exportConfigBtn');
 const importConfigBtn = document.getElementById('importConfigBtn');
 const importConfigFile = document.getElementById('importConfigFile');
+
 const configNameInput = document.getElementById('configNameInput');
 const configDescriptionInput = document.getElementById('configDescriptionInput');
 const maxStepDurationInput = document.getElementById('maxStepDurationInput');
 const allowExtraEventsInput = document.getElementById('allowExtraEventsInput');
+
+const configFlowSelect = document.getElementById('configFlowSelect');
+const addFlowBtn = document.getElementById('addFlowBtn');
+const removeFlowBtn = document.getElementById('removeFlowBtn');
+
+const selectedFlowEditor = document.getElementById('selectedFlowEditor');
+const flowIdInput = document.getElementById('flowIdInput');
+const flowNameInput = document.getElementById('flowNameInput');
+const flowDescriptionInput = document.getElementById('flowDescriptionInput');
 const addFlowStepBtn = document.getElementById('addFlowStepBtn');
 const flowStepsEditor = document.getElementById('flowStepsEditor');
 const configMessage = document.getElementById('configMessage');
@@ -54,7 +65,9 @@ let selectedChannels = new Set();
 let liveEventsCollapsed = false;
 let traceCollapsed = false;
 let configCollapsed = false;
+
 let currentConfig = null;
+let selectedConfigFlowId = null;
 
 function setStreamStatus(state) {
     streamStatus.className = `status-badge ${state}`;
@@ -73,9 +86,11 @@ function setStreamStatus(state) {
 
 async function fetchJson(url, options = {}) {
     const response = await fetch(url, options);
+
     if (!response.ok) {
         throw new Error(`Request failed: ${response.status}`);
     }
+
     return response.json();
 }
 
@@ -123,11 +138,13 @@ function escapeHtml(text) {
     return String(text ?? '')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
 }
 
 function formatTime(value) {
     if (!value) return '-';
+
     try {
         return new Date(value).toLocaleTimeString();
     } catch {
@@ -137,6 +154,7 @@ function formatTime(value) {
 
 function formatDateTime(value) {
     if (!value) return '-';
+
     try {
         return new Date(value).toISOString();
     } catch {
@@ -148,6 +166,7 @@ function formatDuration(value) {
     if (value === null || value === undefined) {
         return '-';
     }
+
     return `${value} ms`;
 }
 
@@ -158,6 +177,7 @@ function payloadPreview(payload) {
 
 function prettyPayload(payload) {
     if (!payload) return '';
+
     try {
         return JSON.stringify(JSON.parse(payload), null, 2);
     } catch {
@@ -359,6 +379,11 @@ async function loadSummary() {
     }
 }
 
+function selectedTraceFlowId() {
+    const value = traceFlowSelect.value;
+    return value && value.trim() ? value.trim() : null;
+}
+
 async function inspectTrace() {
     const traceId = traceIdInput.value.trim();
 
@@ -371,7 +396,12 @@ async function inspectTrace() {
     }
 
     try {
-        const trace = await fetchJson(`/api/correlation/trace/${encodeURIComponent(traceId)}`);
+        const flowId = selectedTraceFlowId();
+        const url = flowId
+            ? `/api/correlation/trace/${encodeURIComponent(traceId)}?flowId=${encodeURIComponent(flowId)}`
+            : `/api/correlation/trace/${encodeURIComponent(traceId)}`;
+
+        const trace = await fetchJson(url);
         renderTrace(trace);
     } catch (e) {
         console.error('Failed loading trace', e);
@@ -390,10 +420,9 @@ function renderTrace(trace) {
 
         if (trace.validation) {
             renderFlowStatus(trace.validation);
-            renderFlowGraph(trace.validation);
+            renderFlowGraphFromValidation(trace.validation);
         } else {
-            flowStatus.classList.add('hidden');
-            flowGraph.classList.add('hidden');
+            renderActualFlowGraph([]);
         }
 
         return;
@@ -408,10 +437,10 @@ function renderTrace(trace) {
 
     if (trace.validation) {
         renderFlowStatus(trace.validation);
-        renderFlowGraph(trace.validation);
+        renderFlowGraphFromValidation(trace.validation);
     } else {
         flowStatus.classList.add('hidden');
-        flowGraph.classList.add('hidden');
+        renderActualFlowGraph(trace.events);
     }
 
     for (const event of trace.events) {
@@ -487,7 +516,7 @@ function renderFlowStatus(validation) {
     `;
 }
 
-function renderFlowGraph(validation) {
+function renderFlowGraphFromValidation(validation) {
     flowGraph.classList.remove('hidden');
     flowGraph.innerHTML = '';
 
@@ -539,11 +568,54 @@ function renderFlowGraph(validation) {
     }
 }
 
+function renderActualFlowGraph(events) {
+    flowGraph.classList.remove('hidden');
+    flowGraph.innerHTML = '';
+
+    if (!events || events.length === 0) {
+        flowGraph.innerHTML = `
+            <div class="flow-extra">
+                <strong>No events to graph</strong>
+                <span>Select a trace with events to see the actual flow.</span>
+            </div>
+        `;
+        return;
+    }
+
+    events.forEach((event, index) => {
+        const node = document.createElement('div');
+        node.className = 'flow-node found';
+
+        node.innerHTML = `
+            <div class="flow-node-label">${escapeHtml(event.protocol || '-')}</div>
+            <div class="flow-node-channel">${escapeHtml(event.channel || '-')}</div>
+            <div class="flow-node-protocol">Actual event #${escapeHtml(event.index ?? index + 1)}</div>
+            <div class="flow-node-time">source Δ ${formatDuration(event.deltaFromPreviousSourceMs)}</div>
+            <div class="flow-node-observed">obs Δ ${formatDuration(event.deltaFromPreviousObservedMs)}</div>
+        `;
+
+        flowGraph.appendChild(node);
+
+        if (index < events.length - 1) {
+            const arrow = document.createElement('div');
+            arrow.className = 'flow-arrow connected';
+            arrow.innerHTML = '→';
+            flowGraph.appendChild(arrow);
+        }
+    });
+}
+
 async function loadConfig() {
     try {
         const config = await fetchJson('/api/investigation/config');
         currentConfig = normalizeConfig(config);
+
+        if (!selectedConfigFlowId && currentConfig.flows.length > 0) {
+            selectedConfigFlowId = currentConfig.flows[0].id;
+        }
+
         renderConfigEditor(currentConfig);
+        renderTraceFlowSelector(currentConfig);
         showConfigMessage('Config loaded.', 'ok');
     } catch (e) {
         console.error('Failed loading config', e);
@@ -553,6 +625,8 @@ async function loadConfig() {
 
 async function saveConfig() {
     try {
+        persistSelectedFlowEditorIntoConfig();
+
         const config = readConfigFromEditor();
 
         const saved = await fetchJson('/api/investigation/config', {
@@ -564,7 +638,13 @@ async function saveConfig() {
         });
 
         currentConfig = normalizeConfig(saved);
+
+        if (!currentConfig.flows.some(flow => flow.id === selectedConfigFlowId)) {
+            selectedConfigFlowId = currentConfig.flows[0]?.id || null;
+        }
+
         renderConfigEditor(currentConfig);
+        renderTraceFlowSelector(currentConfig);
         showConfigMessage('Config saved.', 'ok');
 
         if (traceIdInput.value.trim()) {
@@ -580,11 +660,20 @@ function normalizeConfig(config) {
     return {
         name: config?.name || '',
         description: config?.description || '',
-        steps: Array.isArray(config?.steps) ? config.steps : [],
+        flows: Array.isArray(config?.flows) ? config.flows.map(normalizeFlow) : [],
         rules: {
             maxStepDurationMs: config?.rules?.maxStepDurationMs ?? 50,
             allowExtraEvents: config?.rules?.allowExtraEvents ?? true
         }
+    };
+}
+
+function normalizeFlow(flow) {
+    return {
+        id: flow?.id || createFlowId(flow?.name || 'flow'),
+        name: flow?.name || '',
+        description: flow?.description || '',
+        steps: Array.isArray(flow?.steps) ? flow.steps : []
     };
 }
 
@@ -594,19 +683,95 @@ function renderConfigEditor(config) {
     maxStepDurationInput.value = String(config.rules?.maxStepDurationMs ?? 50);
     allowExtraEventsInput.checked = Boolean(config.rules?.allowExtraEvents ?? true);
 
+    renderConfigFlowSelector(config);
+    renderSelectedFlowEditor();
+}
+
+function renderConfigFlowSelector(config) {
+    configFlowSelect.innerHTML = '';
+
+    if (!config.flows || config.flows.length === 0) {
+        selectedConfigFlowId = null;
+
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No flows configured';
+        configFlowSelect.appendChild(option);
+        return;
+    }
+
+    if (!selectedConfigFlowId || !config.flows.some(flow => flow.id === selectedConfigFlowId)) {
+        selectedConfigFlowId = config.flows[0].id;
+    }
+
+    for (const flow of config.flows) {
+        const option = document.createElement('option');
+        option.value = flow.id;
+        option.textContent = `${flow.name || flow.id} (${flow.id})`;
+        option.selected = flow.id === selectedConfigFlowId;
+        configFlowSelect.appendChild(option);
+    }
+}
+
+function renderTraceFlowSelector(config) {
+    const previous = traceFlowSelect.value;
+
+    traceFlowSelect.innerHTML = '';
+
+    const noValidation = document.createElement('option');
+    noValidation.value = '';
+    noValidation.textContent = 'No validation — show actual graph only';
+    traceFlowSelect.appendChild(noValidation);
+
+    for (const flow of config.flows || []) {
+        const option = document.createElement('option');
+        option.value = flow.id;
+        option.textContent = flow.name ? `${flow.name} (${flow.id})` : flow.id;
+        traceFlowSelect.appendChild(option);
+    }
+
+    if ([...traceFlowSelect.options].some(option => option.value === previous)) {
+        traceFlowSelect.value = previous;
+    }
+}
+
+function renderSelectedFlowEditor() {
     flowStepsEditor.innerHTML = '';
 
-    const steps = [...(config.steps || [])]
+    const flow = selectedFlow();
+    const hasFlow = Boolean(flow);
+
+    selectedFlowEditor.classList.toggle('hidden', !hasFlow);
+    removeFlowBtn.disabled = !hasFlow;
+    addFlowStepBtn.disabled = !hasFlow;
+
+    if (!flow) {
+        return;
+    }
+
+    flowIdInput.value = flow.id || '';
+    flowNameInput.value = flow.name || '';
+    flowDescriptionInput.value = flow.description || '';
+
+    const steps = [...(flow.steps || [])]
         .sort((a, b) => Number(a.index ?? 0) - Number(b.index ?? 0));
 
     steps.forEach((step, idx) => {
         flowStepsEditor.appendChild(createStepEditorRow({
             index: idx + 1,
-            protocol: step.protocol || '',
+            protocol: step.protocol || 'MQTT',
             channel: step.channel || '',
             label: step.label || ''
         }));
     });
+}
+
+function selectedFlow() {
+    if (!currentConfig || !selectedConfigFlowId) {
+        return null;
+    }
+
+    return currentConfig.flows.find(flow => flow.id === selectedConfigFlowId) || null;
 }
 
 function createStepEditorRow(step) {
@@ -614,7 +779,7 @@ function createStepEditorRow(step) {
     row.className = 'flow-step-row';
 
     row.innerHTML = `
-        <div class="step-index">${step.index}</div>
+        <div class="step-index">${escapeHtml(step.index)}</div>
 
         <select class="step-protocol">
             <option value="MQTT" ${step.protocol === 'MQTT' ? 'selected' : ''}>MQTT</option>
@@ -652,18 +817,72 @@ function addFlowStep() {
     }));
 }
 
-function readConfigFromEditor() {
-    const steps = [...flowStepsEditor.querySelectorAll('.flow-step-row')].map((row, index) => ({
-        index: index + 1,
-        protocol: row.querySelector('.step-protocol').value,
-        channel: row.querySelector('.step-channel').value.trim(),
-        label: row.querySelector('.step-label').value.trim()
-    })).filter(step => step.channel);
+function addFlow() {
+    persistSelectedFlowEditorIntoConfig();
 
+    const nextNumber = (currentConfig?.flows?.length || 0) + 1;
+    const flow = {
+        id: `flow-${nextNumber}`,
+        name: `Flow ${nextNumber}`,
+        description: '',
+        steps: []
+    };
+
+    currentConfig.flows.push(flow);
+    selectedConfigFlowId = flow.id;
+
+    renderConfigEditor(currentConfig);
+    renderTraceFlowSelector(currentConfig);
+    showConfigMessage('Flow added. Save config to persist.', 'ok');
+}
+
+function removeSelectedFlow() {
+    if (!currentConfig || !selectedConfigFlowId) return;
+
+    currentConfig.flows = currentConfig.flows.filter(flow => flow.id !== selectedConfigFlowId);
+    selectedConfigFlowId = currentConfig.flows[0]?.id || null;
+
+    renderConfigEditor(currentConfig);
+    renderTraceFlowSelector(currentConfig);
+    showConfigMessage('Flow removed. Save config to persist.', 'ok');
+}
+
+function persistSelectedFlowEditorIntoConfig() {
+    const flow = selectedFlow();
+
+    if (!flow) {
+        return;
+    }
+
+    const oldId = flow.id;
+    const newId = flowIdInput.value.trim() || oldId || createFlowId(flowNameInput.value || 'flow');
+
+    flow.id = newId;
+    flow.name = flowNameInput.value.trim();
+    flow.description = flowDescriptionInput.value.trim();
+    flow.steps = readStepsFromEditor();
+
+    if (selectedConfigFlowId === oldId) {
+        selectedConfigFlowId = newId;
+    }
+}
+
+function readStepsFromEditor() {
+    return [...flowStepsEditor.querySelectorAll('.flow-step-row')]
+        .map((row, index) => ({
+            index: index + 1,
+            protocol: row.querySelector('.step-protocol').value,
+            channel: row.querySelector('.step-channel').value.trim(),
+            label: row.querySelector('.step-label').value.trim()
+        }))
+        .filter(step => step.channel);
+}
+
+function readConfigFromEditor() {
     return {
         name: configNameInput.value.trim(),
         description: configDescriptionInput.value.trim(),
-        steps,
+        flows: currentConfig?.flows || [],
         rules: {
             maxStepDurationMs: Number(maxStepDurationInput.value || 0),
             allowExtraEvents: allowExtraEventsInput.checked
@@ -671,7 +890,17 @@ function readConfigFromEditor() {
     };
 }
 
+function createFlowId(seed) {
+    return String(seed || 'flow')
+        .trim()
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/g, '-')
+        .replaceAll(/^-+|-+$/g, '') || `flow-${Date.now()}`;
+}
+
 function exportConfig() {
+    persistSelectedFlowEditorIntoConfig();
+
     const config = readConfigFromEditor();
     const blob = new Blob([JSON.stringify(config, null, 2)], {
         type: 'application/json'
@@ -681,7 +910,7 @@ function exportConfig() {
     const link = document.createElement('a');
 
     link.href = url;
-    link.download = `${config.name || 'investigation-config'}.json`;
+    link.download = `${createFlowId(config.name || 'investigation-config')}.json`;
     link.click();
 
     URL.revokeObjectURL(url);
@@ -695,7 +924,9 @@ function importConfigFromFile(file) {
         try {
             const parsed = JSON.parse(reader.result);
             currentConfig = normalizeConfig(parsed);
+            selectedConfigFlowId = currentConfig.flows[0]?.id || null;
             renderConfigEditor(currentConfig);
+            renderTraceFlowSelector(currentConfig);
             await saveConfig();
             showConfigMessage('Config imported and saved.', 'ok');
         } catch (e) {
@@ -771,6 +1002,12 @@ traceIdInput.addEventListener('keydown', event => {
     }
 });
 
+traceFlowSelect.addEventListener('change', () => {
+    if (traceIdInput.value.trim()) {
+        inspectTrace();
+    }
+});
+
 toggleLiveEventsBtn.addEventListener('click', () => {
     toggleLiveEvents();
 });
@@ -801,10 +1038,26 @@ importConfigBtn.addEventListener('click', () => {
 
 importConfigFile.addEventListener('change', event => {
     const file = event.target.files?.[0];
+
     if (file) {
         importConfigFromFile(file);
     }
+
     importConfigFile.value = '';
+});
+
+addFlowBtn.addEventListener('click', () => {
+    addFlow();
+});
+
+removeFlowBtn.addEventListener('click', () => {
+    removeSelectedFlow();
+});
+
+configFlowSelect.addEventListener('change', () => {
+    persistSelectedFlowEditorIntoConfig();
+    selectedConfigFlowId = configFlowSelect.value || null;
+    renderSelectedFlowEditor();
 });
 
 addFlowStepBtn.addEventListener('click', () => {
