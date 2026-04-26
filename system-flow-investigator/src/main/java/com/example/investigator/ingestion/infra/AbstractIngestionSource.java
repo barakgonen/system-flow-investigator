@@ -3,6 +3,7 @@ package com.example.investigator.ingestion.infra;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public abstract class AbstractIngestionSource<C, S> implements IngestionSource<C, S> {
 
@@ -11,7 +12,7 @@ public abstract class AbstractIngestionSource<C, S> implements IngestionSource<C
 
     @Override
     public Set<String> observedChannels() {
-        return observedChannels;
+        return observedChannels.stream().filter(s -> s != null && !s.isBlank() && !s.equals("#")).collect(Collectors.toSet());
     }
 
     public boolean shouldPersist(String channel) {
