@@ -16,7 +16,7 @@ public class CorrelationController {
 
     @GetMapping("/trace/{traceId}")
     public TraceTimelineResponse trace(@PathVariable("traceId") String traceId,
-                                       @RequestParam(required = false) String flowId) {
+                                       @RequestParam(name = "flowId", required = false) String flowId) {
         return correlationService.trace(traceId, flowId);
     }
 }
