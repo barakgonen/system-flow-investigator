@@ -13,11 +13,24 @@ const connectStreamBtn = document.getElementById('connectStreamBtn');
 const disconnectStreamBtn = document.getElementById('disconnectStreamBtn');
 const textFilterInput = document.getElementById('textFilter');
 
+const toggleLiveEventsBtn = document.getElementById('toggleLiveEventsBtn');
+const liveEventsBody = document.getElementById('liveEventsBody');
+
+const traceIdInput = document.getElementById('traceIdInput');
+const inspectTraceBtn = document.getElementById('inspectTraceBtn');
+const traceSummary = document.getElementById('traceSummary');
+const traceTimeline = document.getElementById('traceTimeline');
+const toggleTraceBtn = document.getElementById('toggleTraceBtn');
+const traceBody = document.getElementById('traceBody');
+
 let eventSource = null;
 let cachedEvents = [];
 let cachedMqttTopics = [];
 let cachedWsChannels = [];
 let selectedChannels = new Set();
+
+let liveEventsCollapsed = false;
+let traceCollapsed = false;
 
 function setStreamStatus(state) {
     streamStatus.className = `status-badge ${state}`;
@@ -43,11 +56,9 @@ async function fetchJson(url) {
 }
 
 function updateSelectionLabel() {
-    if (selectedChannels.size === 0) {
-        selectedTopicLabel.textContent = 'All channels';
-    } else {
-        selectedTopicLabel.textContent = `${selectedChannels.size} selected`;
-    }
+    selectedTopicLabel.textContent = selectedChannels.size === 0
+        ? 'All channels'
+        : `${selectedChannels.size} selected`;
 }
 
 function appendRepeatedParams(params, name, values) {
@@ -85,7 +96,7 @@ function buildStreamUrl() {
 }
 
 function escapeHtml(text) {
-    return String(text)
+    return String(text ?? '')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;');
@@ -100,9 +111,38 @@ function formatTime(value) {
     }
 }
 
+function formatDateTime(value) {
+    if (!value) return '-';
+    try {
+        return new Date(value).toISOString();
+    } catch {
+        return value;
+    }
+}
+
+function formatDuration(value) {
+    if (value === null || value === undefined) {
+        return '-';
+    }
+    return `${value} ms`;
+}
+
 function payloadPreview(payload) {
     if (!payload) return '';
     return payload.length > 120 ? payload.slice(0, 120) + '...' : payload;
+}
+
+function prettyPayload(payload) {
+    if (!payload) return '';
+    try {
+        return JSON.stringify(JSON.parse(payload), null, 2);
+    } catch {
+        return payload;
+    }
+}
+
+function eventObservedAt(event) {
+    return event.observedAt || event.receivedAt || event.timestamp;
 }
 
 function renderEvents(events) {
@@ -115,7 +155,7 @@ function renderEvents(events) {
     for (const event of ordered) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${escapeHtml(formatTime(event.receivedAt))}</td>
+            <td>${escapeHtml(formatTime(eventObservedAt(event)))}</td>
             <td>${escapeHtml(event.protocol || '-')}</td>
             <td>${escapeHtml(event.channel || '-')}</td>
             <td>${escapeHtml(event.traceId || '-')}</td>
@@ -124,6 +164,9 @@ function renderEvents(events) {
 
         tr.onclick = () => {
             eventDetails.textContent = JSON.stringify(event, null, 2);
+            if (event.traceId) {
+                traceIdInput.value = event.traceId;
+            }
         };
 
         eventsTableBody.appendChild(tr);
@@ -220,33 +263,29 @@ function connectStream() {
     let activated = false;
 
     es.onopen = () => {
-        if (eventSource !== es) {
-            return;
-        }
+        if (eventSource !== es) return;
         activated = true;
         setStreamStatus('connected');
     };
 
     es.onmessage = (event) => {
-        if (eventSource !== es) {
-            return;
-        }
+        if (eventSource !== es) return;
 
         if (!activated) {
             activated = true;
             setStreamStatus('connected');
         }
 
-        if (!event.data) {
-            return;
-        }
+        if (!event.data) return;
 
         try {
             const parsed = JSON.parse(event.data);
             cachedEvents.push(parsed);
+
             if (cachedEvents.length > 500) {
                 cachedEvents = cachedEvents.slice(cachedEvents.length - 500);
             }
+
             renderEvents(cachedEvents);
         } catch (e) {
             console.error('Failed parsing SSE payload', e, event.data);
@@ -254,9 +293,7 @@ function connectStream() {
     };
 
     es.addEventListener('heartbeat', () => {
-        if (eventSource !== es) {
-            return;
-        }
+        if (eventSource !== es) return;
 
         if (!activated) {
             activated = true;
@@ -265,9 +302,7 @@ function connectStream() {
     });
 
     es.onerror = () => {
-        if (eventSource !== es) {
-            return;
-        }
+        if (eventSource !== es) return;
         disconnectStreamInternal();
         setStreamStatus('disconnected');
     };
@@ -294,6 +329,84 @@ async function loadSummary() {
     }
 }
 
+async function inspectTrace() {
+    const traceId = traceIdInput.value.trim();
+
+    if (!traceId) {
+        traceSummary.textContent = 'Please enter a traceId.';
+        traceTimeline.innerHTML = '';
+        return;
+    }
+
+    try {
+        const trace = await fetchJson(`/api/correlation/trace/${encodeURIComponent(traceId)}`);
+        renderTrace(trace);
+    } catch (e) {
+        console.error('Failed loading trace', e);
+        traceSummary.textContent = 'Failed loading trace.';
+        traceTimeline.innerHTML = '';
+    }
+}
+
+function renderTrace(trace) {
+    traceTimeline.innerHTML = '';
+
+    if (!trace.events || trace.events.length === 0) {
+        traceSummary.innerHTML = `<strong>${escapeHtml(trace.traceId || '-')}</strong> | no events found`;
+        return;
+    }
+
+    traceSummary.innerHTML = `
+        <strong>${escapeHtml(trace.traceId || '-')}</strong>
+        <span>${trace.eventCount} events</span>
+        <span>Source duration: ${formatDuration(trace.totalSourceDurationMs)}</span>
+        <span>Observed duration: ${formatDuration(trace.totalObservedDurationMs)}</span>
+    `;
+
+    for (const event of trace.events) {
+        const item = document.createElement('div');
+        item.className = 'trace-step';
+
+        item.innerHTML = `
+            <div class="trace-index">${escapeHtml(event.index ?? '-')}</div>
+            <div class="trace-content">
+                <div class="trace-title">
+                    <span class="protocol-pill ${escapeHtml((event.protocol || '').toLowerCase())}">
+                        ${escapeHtml(event.protocol || '-')}
+                    </span>
+                    <strong>${escapeHtml(event.channel || '-')}</strong>
+                </div>
+
+                <div class="trace-time">
+                    <span>Source sent: ${escapeHtml(formatDateTime(event.sourceSentAt))}</span>
+                    <span>Observed: ${escapeHtml(formatDateTime(event.observedAt))}</span>
+                </div>
+
+                <div class="trace-delta">
+                    <span>Δ source: ${formatDuration(event.deltaFromPreviousSourceMs)}</span>
+                    <span>Δ observed: ${formatDuration(event.deltaFromPreviousObservedMs)}</span>
+                </div>
+
+                <pre>${escapeHtml(prettyPayload(event.payload))}</pre>
+            </div>
+        `;
+
+        traceTimeline.appendChild(item);
+    }
+}
+
+function toggleLiveEvents() {
+    liveEventsCollapsed = !liveEventsCollapsed;
+    liveEventsBody.classList.toggle('collapsed', liveEventsCollapsed);
+    toggleLiveEventsBtn.textContent = liveEventsCollapsed ? 'Expand' : 'Collapse';
+}
+
+function toggleTrace() {
+    traceCollapsed = !traceCollapsed;
+    traceBody.classList.toggle('collapsed', traceCollapsed);
+    toggleTraceBtn.textContent = traceCollapsed ? 'Expand' : 'Collapse';
+}
+
 refreshTopicsBtn.addEventListener('click', async () => {
     await refreshChannels();
     await loadRecent();
@@ -314,6 +427,24 @@ disconnectStreamBtn.addEventListener('click', () => {
 textFilterInput.addEventListener('change', async () => {
     await loadRecent();
     reconnectStreamIfConnected();
+});
+
+inspectTraceBtn.addEventListener('click', () => {
+    inspectTrace();
+});
+
+traceIdInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+        inspectTrace();
+    }
+});
+
+toggleLiveEventsBtn.addEventListener('click', () => {
+    toggleLiveEvents();
+});
+
+toggleTraceBtn.addEventListener('click', () => {
+    toggleTrace();
 });
 
 (async function init() {

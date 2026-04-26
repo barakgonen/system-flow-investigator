@@ -67,22 +67,27 @@
             <section class="panel table-panel">
                 <div class="panel-header">
                     <h2>Live Events</h2>
-                    <button id="loadRecentBtn">Load Recent</button>
+                    <div class="panel-actions">
+                        <button id="loadRecentBtn">Load Recent</button>
+                        <button id="toggleLiveEventsBtn" class="secondary-button">Collapse</button>
+                    </div>
                 </div>
 
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Protocol</th>
-                            <th>Channel</th>
-                            <th>Trace ID</th>
-                            <th>Payload</th>
-                        </tr>
-                        </thead>
-                        <tbody id="eventsTableBody"></tbody>
-                    </table>
+                <div id="liveEventsBody" class="collapsible-body">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Protocol</th>
+                                <th>Channel</th>
+                                <th>Trace ID</th>
+                                <th>Payload</th>
+                            </tr>
+                            </thead>
+                            <tbody id="eventsTableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
@@ -92,6 +97,26 @@
                 </div>
                 <pre id="eventDetails">Select an event to inspect details.</pre>
             </section>
+        </section>
+
+        <section class="panel trace-panel">
+            <div class="panel-header">
+                <h2>Trace Timeline</h2>
+                <button id="toggleTraceBtn" class="secondary-button">Collapse</button>
+            </div>
+
+            <div id="traceBody" class="collapsible-body">
+                <div class="trace-controls">
+                    <input id="traceIdInput" type="text" placeholder="Paste traceId">
+                    <button id="inspectTraceBtn">Inspect Trace</button>
+                </div>
+
+                <div id="traceSummary" class="trace-summary">
+                    No trace selected.
+                </div>
+
+                <div id="traceTimeline" class="trace-timeline"></div>
+            </div>
         </section>
     </main>
 </div>
