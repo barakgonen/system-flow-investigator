@@ -22,6 +22,8 @@ const traceSummary = document.getElementById('traceSummary');
 const traceTimeline = document.getElementById('traceTimeline');
 const toggleTraceBtn = document.getElementById('toggleTraceBtn');
 const traceBody = document.getElementById('traceBody');
+const liveEventsPanel = document.getElementById('liveEventsPanel');
+const tracePanel = document.getElementById('tracePanel');
 
 let eventSource = null;
 let cachedEvents = [];
@@ -163,7 +165,12 @@ function renderEvents(events) {
         `;
 
         tr.onclick = () => {
+            document.querySelectorAll('#eventsTableBody tr')
+                .forEach(row => row.classList.remove('selected-row'));
+
+            tr.classList.add('selected-row');
             eventDetails.textContent = JSON.stringify(event, null, 2);
+
             if (event.traceId) {
                 traceIdInput.value = event.traceId;
             }
@@ -397,13 +404,19 @@ function renderTrace(trace) {
 
 function toggleLiveEvents() {
     liveEventsCollapsed = !liveEventsCollapsed;
+
     liveEventsBody.classList.toggle('collapsed', liveEventsCollapsed);
+    liveEventsPanel.classList.toggle('panel-collapsed', liveEventsCollapsed);
+
     toggleLiveEventsBtn.textContent = liveEventsCollapsed ? 'Expand' : 'Collapse';
 }
 
 function toggleTrace() {
     traceCollapsed = !traceCollapsed;
+
     traceBody.classList.toggle('collapsed', traceCollapsed);
+    tracePanel.classList.toggle('panel-collapsed', traceCollapsed);
+
     toggleTraceBtn.textContent = traceCollapsed ? 'Expand' : 'Collapse';
 }
 
