@@ -1261,3 +1261,130 @@ tbody tr.selected-row {
         width: 100%;
     }
 }
+
+/* ═══════════════════════════════════════════════════
+   Phase 7A — Dashboard / Channel Statistics
+   ═══════════════════════════════════════════════════ */
+
+.dashboard-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.dashboard-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.dashboard-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+}
+
+.dashboard-card span {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 8px;
+}
+
+.dashboard-card strong {
+    font-family: var(--mono);
+    font-size: 24px;
+    color: var(--cyan);
+}
+
+.dashboard-table-wrapper {
+    overflow: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+.dashboard-table-wrapper tbody tr {
+    cursor: pointer;
+}
+
+.dashboard-table-wrapper tbody tr:hover {
+    background: var(--cyan-dim);
+}
+
+@media (max-width: 900px) {
+    .dashboard-summary-grid {
+        grid-template-columns: repeat(2, minmax(140px, 1fr));
+    }
+}
+
+@media (max-width: 520px) {
+    .dashboard-summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.rate-comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.rate-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+}
+
+.rate-card span {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 8px;
+}
+
+.rate-card strong {
+    display: block;
+    font-family: var(--mono);
+    font-size: 22px;
+    color: var(--cyan);
+    margin-bottom: 4px;
+}
+
+.rate-card small {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+}
+
+.rate-up {
+    color: var(--green) !important;
+}
+
+.rate-down {
+    color: var(--red) !important;
+}
+
+.rate-stable {
+    color: var(--cyan) !important;
+}
+
+@media (max-width: 900px) {
+    .rate-comparison-grid {
+        grid-template-columns: 1fr;
+    }
+}

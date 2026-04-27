@@ -27,6 +27,8 @@
             <div class="connect-block-label">Stream</div>
             <div class="connect-block-row">
                 <span id="streamStatus" class="status-badge disconnected">Disconnected</span>
+            </div>
+            <div class="connect-block-col">
                 <div class="connect-buttons">
                     <button id="connectStreamBtn">Connect</button>
                     <button id="disconnectStreamBtn">Disconnect</button>
@@ -100,6 +102,7 @@
             <button class="tab active" data-tab="liveEventsPanel" role="tab" aria-selected="true">Live Events</button>
             <button class="tab" data-tab="tracePanel" role="tab" aria-selected="false">Trace Timeline</button>
             <button class="tab" data-tab="flowConfigPanel" role="tab" aria-selected="false">Flow Config</button>
+            <button class="tab" data-tab="dashboardPanel" role="tab" aria-selected="false">Channels / Topics Stats</button>
         </nav>
 
         <section id="liveEventsPanel" class="panel table-panel tab-panel active-panel">
@@ -245,6 +248,75 @@
                 </div>
 
                 <div id="configMessage" class="config-message"></div>
+            </div>
+        </section>
+
+        <section id="dashboardPanel" class="panel dashboard-panel tab-panel">
+            <div class="panel-header">
+                <h2>Channel Statistics</h2>
+                <button class="collapse-btn secondary-btn" data-target="dashboardBody" data-panel="dashboardPanel">
+                    <svg class="chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <polyline points="2,4 6,8 10,4"/>
+                    </svg>
+                    Collapse
+                </button>
+            </div>
+
+            <div id="dashboardBody" class="collapsible-body">
+                <div class="dashboard-summary-grid">
+                    <div class="dashboard-card">
+                        <span>Total Events</span>
+                        <strong id="dashboardTotalEvents">0</strong>
+                    </div>
+                    <div class="dashboard-card">
+                        <span>MQTT Events</span>
+                        <strong id="dashboardMqttEvents">0</strong>
+                    </div>
+                    <div class="dashboard-card">
+                        <span>WS Events</span>
+                        <strong id="dashboardWsEvents">0</strong>
+                    </div>
+                    <div class="dashboard-card">
+                        <span>Channels</span>
+                        <strong id="dashboardChannelCount">0</strong>
+                    </div>
+                </div>
+
+                <div class="rate-comparison-grid">
+                    <div class="rate-card">
+                        <span>Last 10 Minutes Rate</span>
+                        <strong id="dashboardRate10m">0.00</strong>
+                        <small>events / min</small>
+                    </div>
+
+                    <div class="rate-card">
+                        <span>Last 1 Minute Rate</span>
+                        <strong id="dashboardRate1m">0.00</strong>
+                        <small>events / min</small>
+                    </div>
+
+                    <div class="rate-card">
+                        <span>Short-term Trend</span>
+                        <strong id="dashboardRateTrend">Stable</strong>
+                        <small id="dashboardRateTrendDetails">No change detected</small>
+                    </div>
+                </div>
+
+                <div class="dashboard-table-wrapper">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Channel</th>
+                            <th>Protocol</th>
+                            <th>Events</th>
+                            <th>Rate / min</th>
+                            <th>First Seen</th>
+                            <th>Last Seen</th>
+                        </tr>
+                        </thead>
+                        <tbody id="channelStatsTableBody"></tbody>
+                    </table>
+                </div>
             </div>
         </section>
     </main>

@@ -49,6 +49,17 @@ const addFlowStepBtn = document.getElementById('addFlowStepBtn');
 const flowStepsEditor = document.getElementById('flowStepsEditor');
 const configMessage = document.getElementById('configMessage');
 
+const dashboardTotalEvents = document.getElementById('dashboardTotalEvents');
+const dashboardMqttEvents = document.getElementById('dashboardMqttEvents');
+const dashboardWsEvents = document.getElementById('dashboardWsEvents');
+const dashboardChannelCount = document.getElementById('dashboardChannelCount');
+const channelStatsTableBody = document.getElementById('channelStatsTableBody');
+
+const dashboardRate10m = document.getElementById('dashboardRate10m');
+const dashboardRate1m = document.getElementById('dashboardRate1m');
+const dashboardRateTrend = document.getElementById('dashboardRateTrend');
+const dashboardRateTrendDetails = document.getElementById('dashboardRateTrendDetails');
+
 const SLOW_STEP_THRESHOLD_MS = 50;
 const MAX_EVENT_CACHE_SIZE = 2_000;
 
@@ -315,6 +326,7 @@ function applyFiltersAndRenderEvents() {
     visibleEvents = allEventsCache.filter(eventMatchesUiFilters);
     renderEventsTable(visibleEvents);
     eventsCount.textContent = String(visibleEvents.length);
+    renderDashboard();
 }
 
 function renderEventsTable(events) {
@@ -1167,6 +1179,149 @@ async function downloadSession() {
     } catch (e) {
         console.error('Failed downloading session', e);
         alert('Failed downloading investigation session.');
+    }
+}
+
+function renderDashboard() {
+    if (!dashboardTotalEvents || !channelStatsTableBody) {
+        return;
+    }
+
+    const events = allEventsCache || [];
+    renderRateComparison(events);
+    const mqttCount = events.filter(event => (event.protocol || '').toUpperCase() === 'MQTT').length;
+    const wsCount = events.filter(event => (event.protocol || '').toUpperCase() === 'WS').length;
+
+    const byChannel = new Map();
+
+    for (const event of events) {
+        const channel = event.channel || '-';
+        const protocol = event.protocol || '-';
+        const key = `${protocol}|${channel}`;
+        const time = effectiveEventTime(event);
+
+        if (!byChannel.has(key)) {
+            byChannel.set(key, {
+                channel,
+                protocol,
+                count: 0,
+                firstSeen: time,
+                lastSeen: time
+            });
+        }
+
+        const stat = byChannel.get(key);
+        stat.count++;
+
+        if (time && (!stat.firstSeen || time < stat.firstSeen)) {
+            stat.firstSeen = time;
+        }
+
+        if (time && (!stat.lastSeen || time > stat.lastSeen)) {
+            stat.lastSeen = time;
+        }
+    }
+
+    const stats = [...byChannel.values()]
+        .map(stat => ({
+            ...stat,
+            ratePerMinute: calculateRatePerMinute(stat.count, stat.firstSeen, stat.lastSeen)
+        }))
+        .sort((a, b) => b.count - a.count);
+
+    dashboardTotalEvents.textContent = String(events.length);
+    dashboardMqttEvents.textContent = String(mqttCount);
+    dashboardWsEvents.textContent = String(wsCount);
+    dashboardChannelCount.textContent = String(stats.length);
+
+    channelStatsTableBody.innerHTML = '';
+
+    for (const stat of stats) {
+        const protocolClass = stat.protocol.toLowerCase() === 'ws' ? 'ws' : '';
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${escapeHtml(stat.channel)}</td>
+            <td><span class="protocol-pill ${protocolClass}">${escapeHtml(stat.protocol)}</span></td>
+            <td>${escapeHtml(stat.count)}</td>
+            <td>${escapeHtml(stat.ratePerMinute.toFixed(2))}</td>
+            <td>${escapeHtml(formatDateTime(stat.firstSeen))}</td>
+            <td>${escapeHtml(formatDateTime(stat.lastSeen))}</td>
+        `;
+
+        row.onclick = () => {
+            selectedChannels.clear();
+            selectedChannels.add(stat.channel);
+            renderAllChannels();
+            updateSelectionLabel();
+            applyFiltersAndRenderEvents();
+            activateTab('liveEventsPanel');
+        };
+
+        channelStatsTableBody.appendChild(row);
+    }
+}
+
+function calculateRatePerMinute(count, firstSeen, lastSeen) {
+    if (!firstSeen || !lastSeen || count <= 1) {
+        return count;
+    }
+
+    const first = new Date(firstSeen).getTime();
+    const last = new Date(lastSeen).getTime();
+
+    const durationMs = Math.max(last - first, 1);
+    const durationMinutes = durationMs / 60_000;
+
+    return count / durationMinutes;
+}
+
+function renderRateComparison(events) {
+    if (!dashboardRate10m || !dashboardRate1m || !dashboardRateTrend) {
+        return;
+    }
+
+    const now = Date.now();
+    const oneMinuteAgo = now - 60_000;
+    const tenMinutesAgo = now - 10 * 60_000;
+
+    const lastMinuteCount = events.filter(event => {
+        const time = new Date(effectiveEventTime(event)).getTime();
+        return !Number.isNaN(time) && time >= oneMinuteAgo;
+    }).length;
+
+    const lastTenMinutesCount = events.filter(event => {
+        const time = new Date(effectiveEventTime(event)).getTime();
+        return !Number.isNaN(time) && time >= tenMinutesAgo;
+    }).length;
+
+    const rate1m = lastMinuteCount;
+    const rate10m = lastTenMinutesCount / 10;
+
+    dashboardRate1m.textContent = rate1m.toFixed(2);
+    dashboardRate10m.textContent = rate10m.toFixed(2);
+
+    const diff = rate1m - rate10m;
+    const percent = rate10m === 0 ? null : (diff / rate10m) * 100;
+
+    dashboardRateTrend.classList.remove('rate-up', 'rate-down', 'rate-stable');
+
+    if (Math.abs(diff) < 0.01) {
+        dashboardRateTrend.textContent = 'Stable';
+        dashboardRateTrend.classList.add('rate-stable');
+        dashboardRateTrendDetails.textContent = 'Last minute matches the 10m average';
+    } else if (diff > 0) {
+        dashboardRateTrend.textContent = 'Increasing';
+        dashboardRateTrend.classList.add('rate-up');
+        dashboardRateTrendDetails.textContent = percent === null
+            ? `+${diff.toFixed(2)} events/min`
+            : `+${percent.toFixed(1)}% vs 10m average`;
+    } else {
+        dashboardRateTrend.textContent = 'Decreasing';
+        dashboardRateTrend.classList.add('rate-down');
+        dashboardRateTrendDetails.textContent = percent === null
+            ? `${diff.toFixed(2)} events/min`
+            : `${percent.toFixed(1)}% vs 10m average`;
     }
 }
 
