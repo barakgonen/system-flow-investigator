@@ -5,22 +5,28 @@ import com.example.investigator.domain.config.FlowDefinition;
 import com.example.investigator.domain.config.InvestigationConfig;
 import com.example.investigator.domain.export.SessionExportMetadata;
 import com.example.investigator.domain.export.SessionImportSummary;
+import com.example.investigator.domain.session.ImportedSession;
+import com.example.investigator.storage.ImportedSessionStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.zip.ZipInputStream;
 
 @Service
 public class SessionImportService {
 
+    private final ImportedSessionStore importedSessionStore;
     private final ObjectMapper objectMapper;
 
-    public SessionImportService() {
+    public SessionImportService(ImportedSessionStore importedSessionStore) {
+        this.importedSessionStore = importedSessionStore;
         this.objectMapper = new ObjectMapper()
                 .findAndRegisterModules()
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -54,6 +60,19 @@ public class SessionImportService {
 
             List<ObservedEvent> events = parseEvents(content.eventsNdjson);
 
+            String sessionId = UUID.randomUUID().toString();
+
+            ImportedSession session = new ImportedSession(
+                    sessionId,
+                    config.name(),
+                    Instant.now(),
+                    metadata,
+                    config,
+                    events
+            );
+
+            importedSessionStore.save(session);
+
             List<String> flowIds = config.flows() == null
                     ? List.of()
                     : config.flows().stream()
@@ -63,6 +82,7 @@ public class SessionImportService {
             return new SessionImportSummary(
                     "IMPORTED",
                     "Session package imported successfully.",
+                    sessionId,
                     metadata.format(),
                     metadata.version(),
                     metadata.exportedAt(),
@@ -89,7 +109,7 @@ public class SessionImportService {
                     case "config.json" -> content.configJson = entryContent;
                     case "events.ndjson" -> content.eventsNdjson = entryContent;
                     default -> {
-                        // ignore unknown files for forward compatibility
+                        // Ignore unknown files for forward compatibility.
                     }
                 }
 

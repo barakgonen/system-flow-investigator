@@ -5,6 +5,7 @@ import com.example.investigator.domain.config.*;
 import com.example.investigator.domain.export.EventExportQuery;
 import com.example.investigator.domain.export.SessionExportMetadata;
 import com.example.investigator.domain.export.SessionImportSummary;
+import com.example.investigator.storage.ImportedSessionStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,8 @@ class SessionImportServiceTests {
             .findAndRegisterModules()
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    private final SessionImportService service = new SessionImportService();
+    private final ImportedSessionStore store = new ImportedSessionStore();
+    private final SessionImportService service = new SessionImportService(store);
 
     @Test
     void shouldImportValidSessionPackage() throws Exception {
@@ -45,6 +47,7 @@ class SessionImportServiceTests {
         assertThat(summary.importedEventCount()).isEqualTo(1);
         assertThat(summary.investigationName()).isEqualTo("Main Investigation");
         assertThat(summary.flowIds()).containsExactly("main-lab-flow");
+        assertThat(summary.sessionId()).isNotBlank();
     }
 
     @Test

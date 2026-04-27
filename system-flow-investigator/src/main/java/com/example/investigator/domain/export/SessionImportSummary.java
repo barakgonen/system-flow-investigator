@@ -6,6 +6,7 @@ import java.util.List;
 public record SessionImportSummary(
         String status,
         String message,
+        String sessionId,
         String format,
         String version,
         Instant exportedAt,
