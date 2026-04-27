@@ -3,6 +3,7 @@ package com.example.investigator.ingestion.ws;
 import com.example.investigator.domain.ConnectWebSocketRequest;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeWebSocketRequest;
+import com.example.investigator.ingestion.ObservedEventPublisher;
 import com.example.investigator.ingestion.infra.AbstractIngestionSource;
 import com.example.investigator.ingestion.infra.ObservedEventPipeline;
 import com.example.investigator.service.SourceTimestampExtractor;
@@ -32,7 +33,7 @@ public class RealWebSocketObserver extends AbstractIngestionSource<ConnectWebSoc
     private final String defaultHost;
     private final int defaultPort;
 
-    private final ObservedEventPipeline pipeline;
+    private final ObservedEventPublisher publisher;
     private final TraceIdExtractor traceIdExtractor;
     private final SourceTimestampExtractor sourceTimestampExtractor;
     private final WebSocketClientFactory webSocketClientFactory;
@@ -40,7 +41,7 @@ public class RealWebSocketObserver extends AbstractIngestionSource<ConnectWebSoc
 
     private final Map<String, WebSocketSession> sessionsByConnection = new ConcurrentHashMap<>();
 
-    public RealWebSocketObserver(ObservedEventPipeline pipeline,
+    public RealWebSocketObserver(ObservedEventPublisher publisher,
                                  TraceIdExtractor traceIdExtractor,
                                  SourceTimestampExtractor sourceTimestampExtractor,
                                  WebSocketClientFactory webSocketClientFactory,
@@ -48,7 +49,7 @@ public class RealWebSocketObserver extends AbstractIngestionSource<ConnectWebSoc
                                  @Value("${ws.port:8090}") int defaultPort) {
         this.defaultHost = defaultHost;
         this.defaultPort = defaultPort;
-        this.pipeline = pipeline;
+        this.publisher = publisher;
         this.traceIdExtractor = traceIdExtractor;
         this.sourceTimestampExtractor = sourceTimestampExtractor;
         this.webSocketClientFactory = webSocketClientFactory;
@@ -134,7 +135,7 @@ public class RealWebSocketObserver extends AbstractIngestionSource<ConnectWebSoc
                 sourceTimestampExtractor.extract(payload)
         );
 
-        pipeline.accept(event, shouldPersist(channel));
+        publisher.publish(event);
     }
 
     private String resolveLogicalChannel(String connectionName, String payload) {

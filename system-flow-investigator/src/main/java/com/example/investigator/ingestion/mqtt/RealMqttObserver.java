@@ -3,6 +3,7 @@ package com.example.investigator.ingestion.mqtt;
 import com.example.investigator.domain.ConnectMqttRequest;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeMqttRequest;
+import com.example.investigator.ingestion.ObservedEventPublisher;
 import com.example.investigator.ingestion.infra.AbstractIngestionSource;
 import com.example.investigator.ingestion.infra.ObservedEventPipeline;
 import com.example.investigator.service.SourceTimestampExtractor;
@@ -24,7 +25,7 @@ import java.util.UUID;
 public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest, SubscribeMqttRequest>
         implements MqttObserver {
 
-    private final ObservedEventPipeline pipeline;
+    private final ObservedEventPublisher publisher;
     private final TraceIdExtractor traceIdExtractor;
     private final SourceTimestampExtractor sourceTimestampExtractor;
     private final MqttClientFactory mqttClientFactory;
@@ -41,7 +42,7 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
 
     private volatile MqttClient client;
 
-    public RealMqttObserver(ObservedEventPipeline pipeline,
+    public RealMqttObserver(ObservedEventPublisher publisher,
                             TraceIdExtractor traceIdExtractor,
                             SourceTimestampExtractor sourceTimestampExtractor,
                             MqttClientFactory mqttClientFactory,
@@ -50,7 +51,7 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
                             @Value("${mqtt.client-id-prefix:system-flow-investigator}") String defaultClientIdPrefix,
                             @Value("${mqtt.topic-filter:#}") String initialTopicFilter,
                             @Value("${mqtt.persist-by-default:false}") boolean persistByDefault) {
-        this.pipeline = pipeline;
+        this.publisher = publisher;
         this.traceIdExtractor = traceIdExtractor;
         this.sourceTimestampExtractor = sourceTimestampExtractor;
         this.mqttClientFactory = mqttClientFactory;
@@ -181,7 +182,7 @@ public class RealMqttObserver extends AbstractIngestionSource<ConnectMqttRequest
                 sourceTimestampExtractor.extract(payload)
         );
 
-        pipeline.accept(event, shouldPersist(topic));
+        publisher.publish(event);
     }
 
     @PreDestroy

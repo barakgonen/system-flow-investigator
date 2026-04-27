@@ -3,6 +3,7 @@ package com.example.investigator.ingestion.mqtt;
 import com.example.investigator.domain.ConnectMqttRequest;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeMqttRequest;
+import com.example.investigator.ingestion.ObservedEventPublisher;
 import com.example.investigator.ingestion.infra.ObservedEventPipeline;
 import com.example.investigator.service.SourceTimestampExtractor;
 import com.example.investigator.service.TraceIdExtractor;
@@ -19,7 +20,7 @@ import static org.mockito.Mockito.*;
 
 class RealMqttObserverTests {
 
-    private ObservedEventPipeline pipeline;
+    private ObservedEventPublisher pipeline;
     private TraceIdExtractor traceIdExtractor;
     private SourceTimestampExtractor sourceTimestampExtractor;
     private MqttClientFactory mqttClientFactory;
@@ -29,7 +30,7 @@ class RealMqttObserverTests {
 
     @BeforeEach
     void setUp() throws Exception {
-        pipeline = mock(ObservedEventPipeline.class);
+        pipeline = mock(ObservedEventPublisher.class);
         traceIdExtractor = mock(TraceIdExtractor.class);
         sourceTimestampExtractor = mock(SourceTimestampExtractor.class);
         mqttClientFactory = mock(MqttClientFactory.class);
@@ -167,7 +168,7 @@ class RealMqttObserverTests {
         callbackCaptor.getValue().messageArrived("lab/flow/in", message);
 
         ArgumentCaptor<ObservedEvent> eventCaptor = ArgumentCaptor.forClass(ObservedEvent.class);
-        verify(pipeline).accept(eventCaptor.capture(), eq(false));
+        verify(pipeline).publish(eventCaptor.capture());
 
         ObservedEvent event = eventCaptor.getValue();
 
@@ -208,7 +209,7 @@ class RealMqttObserverTests {
 
         callbackCaptor.getValue().messageArrived("lab/flow/in", message);
 
-        verify(pipeline).accept(any(ObservedEvent.class), eq(true));
+        verify(pipeline).publish(any(ObservedEvent.class));
     }
 
     @Test
@@ -234,7 +235,7 @@ class RealMqttObserverTests {
 
         callbackCaptor.getValue().messageArrived("lab/flow/in", message);
 
-        verify(pipeline).accept(any(ObservedEvent.class), eq(false));
+        verify(pipeline).publish(any(ObservedEvent.class));
     }
 
     @Test

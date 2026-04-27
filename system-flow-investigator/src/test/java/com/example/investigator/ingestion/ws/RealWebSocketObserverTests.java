@@ -3,6 +3,7 @@ package com.example.investigator.ingestion.ws;
 import com.example.investigator.domain.ConnectWebSocketRequest;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeWebSocketRequest;
+import com.example.investigator.ingestion.ObservedEventPublisher;
 import com.example.investigator.ingestion.infra.ObservedEventPipeline;
 import com.example.investigator.service.SourceTimestampExtractor;
 import com.example.investigator.service.TraceIdExtractor;
@@ -24,7 +25,7 @@ import static org.mockito.Mockito.*;
 
 class RealWebSocketObserverTests {
 
-    private ObservedEventPipeline pipeline;
+    private ObservedEventPublisher pipeline;
     private TraceIdExtractor traceIdExtractor;
     private SourceTimestampExtractor sourceTimestampExtractor;
     private WebSocketClientFactory webSocketClientFactory;
@@ -35,7 +36,7 @@ class RealWebSocketObserverTests {
 
     @BeforeEach
     void setUp() {
-        pipeline = mock(ObservedEventPipeline.class);
+        pipeline = mock(ObservedEventPublisher.class);
         traceIdExtractor = mock(TraceIdExtractor.class);
         sourceTimestampExtractor = mock(SourceTimestampExtractor.class);
         webSocketClientFactory = mock(WebSocketClientFactory.class);
@@ -136,7 +137,7 @@ class RealWebSocketObserverTests {
                 """));
 
         ArgumentCaptor<ObservedEvent> eventCaptor = ArgumentCaptor.forClass(ObservedEvent.class);
-        verify(pipeline).accept(eventCaptor.capture(), eq(false));
+        verify(pipeline).publish(eventCaptor.capture());
 
         ObservedEvent event = eventCaptor.getValue();
 
@@ -173,7 +174,7 @@ class RealWebSocketObserverTests {
                 }
                 """));
 
-        verify(pipeline).accept(any(ObservedEvent.class), eq(true));
+        verify(pipeline).publish(any(ObservedEvent.class));
     }
 
     @Test
@@ -199,7 +200,7 @@ class RealWebSocketObserverTests {
                 }
                 """));
 
-        verify(pipeline).accept(any(ObservedEvent.class), eq(false));
+        verify(pipeline).publish(any(ObservedEvent.class));
     }
 
     @Test
@@ -219,7 +220,7 @@ class RealWebSocketObserverTests {
                 """));
 
         ArgumentCaptor<ObservedEvent> eventCaptor = ArgumentCaptor.forClass(ObservedEvent.class);
-        verify(pipeline).accept(eventCaptor.capture(), eq(false));
+        verify(pipeline).publish(eventCaptor.capture());
 
         ObservedEvent event = eventCaptor.getValue();
 
@@ -242,7 +243,7 @@ class RealWebSocketObserverTests {
         handler.handleMessage(session, new TextMessage("not-json"));
 
         ArgumentCaptor<ObservedEvent> eventCaptor = ArgumentCaptor.forClass(ObservedEvent.class);
-        verify(pipeline).accept(eventCaptor.capture(), eq(false));
+        verify(pipeline).publish(eventCaptor.capture());
 
         ObservedEvent event = eventCaptor.getValue();
 

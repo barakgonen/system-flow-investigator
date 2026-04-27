@@ -3,6 +3,7 @@ package com.example.investigator.ingestion.ws;
 import com.example.investigator.domain.ConnectWebSocketRequest;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeWebSocketRequest;
+import com.example.investigator.ingestion.ObservedEventPublisher;
 import com.example.investigator.ingestion.infra.ObservedEventPipeline;
 import com.example.investigator.service.SourceTimestampExtractor;
 import com.example.investigator.service.TraceIdExtractor;
@@ -21,7 +22,7 @@ import static org.mockito.Mockito.*;
 
 class RealWebSocketObserverConnectTests {
 
-    private ObservedEventPipeline pipeline;
+    private ObservedEventPublisher pipeline;
     private TraceIdExtractor traceIdExtractor;
     private SourceTimestampExtractor sourceTimestampExtractor;
     private WebSocketClientFactory webSocketClientFactory;
@@ -32,7 +33,7 @@ class RealWebSocketObserverConnectTests {
 
     @BeforeEach
     void setUp() {
-        pipeline = mock(ObservedEventPipeline.class);
+        pipeline = mock(ObservedEventPublisher.class);
         traceIdExtractor = mock(TraceIdExtractor.class);
         sourceTimestampExtractor = mock(SourceTimestampExtractor.class);
 
@@ -115,7 +116,7 @@ class RealWebSocketObserverConnectTests {
                 """));
 
         ArgumentCaptor<ObservedEvent> eventCaptor = ArgumentCaptor.forClass(ObservedEvent.class);
-        verify(pipeline).accept(eventCaptor.capture(), eq(false));
+        verify(pipeline).publish(eventCaptor.capture());
 
         ObservedEvent event = eventCaptor.getValue();
 
@@ -148,7 +149,7 @@ class RealWebSocketObserverConnectTests {
                 }
                 """));
 
-        verify(pipeline).accept(any(ObservedEvent.class), eq(true));
+        verify(pipeline).publish(any(ObservedEvent.class));
     }
 
     @Test
@@ -167,7 +168,7 @@ class RealWebSocketObserverConnectTests {
                 """));
 
         ArgumentCaptor<ObservedEvent> eventCaptor = ArgumentCaptor.forClass(ObservedEvent.class);
-        verify(pipeline).accept(eventCaptor.capture(), eq(false));
+        verify(pipeline).publish(eventCaptor.capture());
 
         assertThat(eventCaptor.getValue().channel()).isEqualTo("WS::lab-ws");
     }
