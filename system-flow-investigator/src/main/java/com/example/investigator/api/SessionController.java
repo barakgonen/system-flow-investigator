@@ -25,7 +25,7 @@ public class SessionController {
     }
 
     @PostMapping("/import")
-    public SessionImportSummary importSession(@RequestParam("file") MultipartFile file) throws Exception {
+    public SessionImportSummary importSession(@RequestParam(name = "file") MultipartFile file) throws Exception {
         return sessionImportService.importSession(file.getBytes());
     }
 
@@ -35,13 +35,13 @@ public class SessionController {
     }
 
     @GetMapping("/imported/{sessionId}/events")
-    public List<ObservedEvent> importedEvents(@PathVariable String sessionId) {
+    public List<ObservedEvent> importedEvents(@PathVariable("sessionId") String sessionId) {
         return importedSessionService.events(sessionId);
     }
 
     @GetMapping("/imported/{sessionId}/trace/{traceId}")
-    public TraceTimelineResponse importedTrace(@PathVariable String sessionId,
-                                               @PathVariable String traceId,
+    public TraceTimelineResponse importedTrace(@PathVariable("sessionId") String sessionId,
+                                               @PathVariable("traceId") String traceId,
                                                @RequestParam(name = "flowId", required = false) String flowId) {
         return importedSessionService.trace(sessionId, traceId, flowId);
     }

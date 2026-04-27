@@ -42,13 +42,13 @@ public class InvestigatorFacadeTests {
     public void testStreamEvents_delegatesToEventHub() {
         // == Arrange
         Flux<ObservedEvent> flux = Mockito.mock(Flux.class);
-        when(eventHub.stream()).thenReturn(flux);
+        when(eventHub.events()).thenReturn(flux);
 
         // == Act
         facade.streamEvents();
 
         // == Assert
-        verify(eventHub).stream();
+        verify(eventHub).events();
     }
 
     // == getRecentEvents(String)

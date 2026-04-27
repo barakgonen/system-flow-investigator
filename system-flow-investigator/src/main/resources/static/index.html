@@ -10,10 +10,7 @@
 </head>
 <body>
 <div class="app-shell">
-
-    <!-- ═══════════════════════════════════════ SIDEBAR -->
     <aside class="sidebar">
-
         <div class="brand">
             <div class="brand-badge">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -26,7 +23,6 @@
             </div>
         </div>
 
-        <!-- Connection block — connectStreamBtn / disconnectStreamBtn / streamStatus live here -->
         <div class="sidebar-connect-block">
             <div class="connect-block-label">Stream</div>
             <div class="connect-block-row">
@@ -57,19 +53,16 @@
             </div>
             <div id="wsChannelsList" class="topics-list"></div>
         </section>
-
     </aside>
 
-    <!-- ═══════════════════════════════════════ MAIN -->
     <main class="main-content">
-
-        <!-- Top bar: title + stats + filter -->
         <header class="topbar">
             <div class="topbar-left">
                 <div class="topbar-heading">
                     <h2>Live Protocol Monitor</h2>
                     <p>Backend-driven flow inspection</p>
                 </div>
+
                 <div class="stats-row">
                     <div class="stat-pill">
                         <strong id="topicsCount">0</strong>
@@ -84,32 +77,35 @@
                         <span>channel</span>
                     </div>
                 </div>
+
+                <div class="session-control">
+                    <span class="session-label">Session</span>
+                    <select id="sessionSelect" class="session-select">
+                        <option value="LIVE">Live</option>
+                    </select>
+                </div>
             </div>
+
             <div class="topbar-right">
+                <button id="downloadSessionBtn" class="secondary-btn">Download Session</button>
+                <button id="importSessionBtn" class="secondary-btn">Import Session</button>
+                <input id="importSessionFile" type="file" accept=".zip,application/zip" hidden>
+
                 <input id="textFilter" type="text" class="filter-input" placeholder="Filter payload…">
                 <button id="loadRecentBtn" class="secondary-btn">Load recent</button>
             </div>
         </header>
 
-        <!-- Tab bar -->
         <nav class="tabs" role="tablist">
-            <button class="tab active" data-tab="liveEventsPanel" role="tab" aria-selected="true">
-                Live Events
-            </button>
-            <button class="tab" data-tab="tracePanel" role="tab" aria-selected="false">
-                Trace Timeline
-            </button>
-            <button class="tab" data-tab="flowConfigPanel" role="tab" aria-selected="false">
-                Flow Config
-            </button>
+            <button class="tab active" data-tab="liveEventsPanel" role="tab" aria-selected="true">Live Events</button>
+            <button class="tab" data-tab="tracePanel" role="tab" aria-selected="false">Trace Timeline</button>
+            <button class="tab" data-tab="flowConfigPanel" role="tab" aria-selected="false">Flow Config</button>
         </nav>
 
-        <!-- ─────────────────── LIVE EVENTS PANEL -->
         <section id="liveEventsPanel" class="panel table-panel tab-panel active-panel">
-
             <div class="panel-header">
                 <h2>Live Events</h2>
-                <button id="toggleLiveEventsBtn" class="collapse-btn secondary-btn" data-target="liveEventsBody" data-panel="liveEventsPanel">
+                <button class="collapse-btn secondary-btn" data-target="liveEventsBody" data-panel="liveEventsPanel">
                     <svg class="chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <polyline points="2,4 6,8 10,4"/>
                     </svg>
@@ -118,18 +114,17 @@
             </div>
 
             <div id="liveEventsBody" class="collapsible-body">
-
                 <div class="live-events-layout">
                     <div class="table-wrapper">
                         <table>
                             <thead>
-                                <tr>
-                                    <th>Time</th>
-                                    <th>Protocol</th>
-                                    <th>Channel</th>
-                                    <th>Trace ID</th>
-                                    <th>Message</th>
-                                </tr>
+                            <tr>
+                                <th>Time</th>
+                                <th>Protocol</th>
+                                <th>Channel</th>
+                                <th>Trace ID</th>
+                                <th>Message</th>
+                            </tr>
                             </thead>
                             <tbody id="eventsTableBody"></tbody>
                         </table>
@@ -142,16 +137,13 @@
                         <pre id="eventDetails">Select an event to inspect details.</pre>
                     </aside>
                 </div>
-
             </div>
         </section>
 
-        <!-- ─────────────────── TRACE PANEL -->
         <section id="tracePanel" class="panel trace-panel tab-panel">
-
             <div class="panel-header">
                 <h2>Trace Timeline</h2>
-                <button id="toggleTraceBtn" class="collapse-btn secondary-btn" data-target="traceBody" data-panel="tracePanel">
+                <button class="collapse-btn secondary-btn" data-target="traceBody" data-panel="tracePanel">
                     <svg class="chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <polyline points="2,4 6,8 10,4"/>
                     </svg>
@@ -173,15 +165,12 @@
                 <div id="flowGraph" class="flow-graph hidden"></div>
                 <div id="traceTimeline" class="trace-timeline"></div>
             </div>
-
         </section>
 
-        <!-- ─────────────────── FLOW CONFIG PANEL -->
         <section id="flowConfigPanel" class="panel config-panel tab-panel">
-
             <div class="panel-header">
                 <h2>Investigation Flow Config</h2>
-                <button id="toggleConfigBtn" class="collapse-btn secondary-btn" data-target="configBody" data-panel="flowConfigPanel">
+                <button class="collapse-btn secondary-btn" data-target="configBody" data-panel="flowConfigPanel">
                     <svg class="chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <polyline points="2,4 6,8 10,4"/>
                     </svg>
@@ -190,7 +179,6 @@
             </div>
 
             <div id="configBody" class="collapsible-body">
-
                 <div class="config-actions">
                     <button id="loadConfigBtn">Load Config</button>
                     <button id="saveConfigBtn" class="primary-btn">Save Config</button>
@@ -257,50 +245,55 @@
                 </div>
 
                 <div id="configMessage" class="config-message"></div>
-
             </div>
         </section>
-
     </main>
 </div>
 
-<!-- Tab switching — runs before app.js, no conflicts -->
 <script>
-(function () {
-    var tabs = document.querySelectorAll('.tab');
-    var panels = document.querySelectorAll('.tab-panel');
+    (function () {
+        var tabs = document.querySelectorAll('.tab');
+        var panels = document.querySelectorAll('.tab-panel');
 
-    function activateTab(targetId) {
-        tabs.forEach(function (t) {
-            var active = t.dataset.tab === targetId;
-            t.classList.toggle('active', active);
-            t.setAttribute('aria-selected', active);
-        });
-        panels.forEach(function (p) {
-            p.classList.toggle('active-panel', p.id === targetId);
-        });
-    }
+        function activateTab(targetId) {
+            tabs.forEach(function (tab) {
+                var active = tab.dataset.tab === targetId;
+                tab.classList.toggle('active', active);
+                tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
 
-    tabs.forEach(function (tab) {
-        tab.addEventListener('click', function () {
-            activateTab(tab.dataset.tab);
-        });
-    });
+            panels.forEach(function (panel) {
+                panel.classList.toggle('active-panel', panel.id === targetId);
+            });
+        }
 
-    // Wire collapse buttons so app.js doesn't need to change
-    document.querySelectorAll('.collapse-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var body = document.getElementById(btn.dataset.target);
-            var panel = document.getElementById(btn.dataset.panel);
-            if (!body) return;
-            var collapsed = body.classList.toggle('collapsed');
-            if (panel) panel.classList.toggle('panel-collapsed', collapsed);
-            var chevron = btn.querySelector('.chevron');
-            if (chevron) chevron.style.transform = collapsed ? 'rotate(-90deg)' : '';
-            btn.childNodes[btn.childNodes.length - 1].textContent = collapsed ? ' Expand' : ' Collapse';
+        tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                activateTab(tab.dataset.tab);
+            });
         });
-    });
-}());
+
+        document.querySelectorAll('.collapse-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var body = document.getElementById(btn.dataset.target);
+                var panel = document.getElementById(btn.dataset.panel);
+                if (!body) return;
+
+                var collapsed = body.classList.toggle('collapsed');
+
+                if (panel) {
+                    panel.classList.toggle('panel-collapsed', collapsed);
+                }
+
+                var chevron = btn.querySelector('.chevron');
+                if (chevron) {
+                    chevron.style.transform = collapsed ? 'rotate(-90deg)' : '';
+                }
+
+                btn.childNodes[btn.childNodes.length - 1].textContent = collapsed ? ' Expand' : ' Collapse';
+            });
+        });
+    }());
 </script>
 
 <script src="/app.js"></script>

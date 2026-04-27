@@ -27,7 +27,7 @@ public class EventHubTests {
     @Test
     public void testStream_returnsNonNullFlux() {
         // == Act
-        Flux<ObservedEvent> flux = eventHub.stream();
+        Flux<ObservedEvent> flux = eventHub.events();
 
         // == Assert
         assertNotNull(flux);
@@ -39,7 +39,7 @@ public class EventHubTests {
         ObservedEvent event = mock(ObservedEvent.class);
 
         // == Act & Assert
-        StepVerifier.create(eventHub.stream())
+        StepVerifier.create(eventHub.events())
                 .then(() -> eventHub.publish(event))
                 .expectNext(event)
                 .thenCancel()
@@ -54,7 +54,7 @@ public class EventHubTests {
         ObservedEvent event3 = mock(ObservedEvent.class);
 
         // == Act & Assert
-        StepVerifier.create(eventHub.stream())
+        StepVerifier.create(eventHub.events())
                 .then(() -> {
                     eventHub.publish(event1);
                     eventHub.publish(event2);
@@ -74,13 +74,13 @@ public class EventHubTests {
         CountDownLatch latch = new CountDownLatch(1);
 
         // Subscribe stream2 first so it's active before publish
-        eventHub.stream().take(1).subscribe(e -> {
+        eventHub.events().take(1).subscribe(e -> {
             receivedBySubscriber2.add(e);
             latch.countDown();
         });
 
         // == Act & Assert - stream1 via StepVerifier, publish happens inside .then()
-        StepVerifier.create(eventHub.stream())
+        StepVerifier.create(eventHub.events())
                 .then(() -> eventHub.publish(event))
                 .expectNext(event)
                 .thenCancel()

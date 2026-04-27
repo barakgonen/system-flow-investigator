@@ -36,7 +36,7 @@ public class InvestigatorFacade {
     }
 
     public Flux<ObservedEvent> streamEvents() {
-        return eventHub.stream();
+        return eventHub.events();
     }
 
     public List<ObservedEvent> getRecentEvents(String channel) {

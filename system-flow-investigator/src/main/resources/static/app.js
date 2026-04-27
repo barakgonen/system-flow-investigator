@@ -13,24 +13,19 @@ const connectStreamBtn = document.getElementById('connectStreamBtn');
 const disconnectStreamBtn = document.getElementById('disconnectStreamBtn');
 const textFilterInput = document.getElementById('textFilter');
 
-const toggleLiveEventsBtn = document.getElementById('toggleLiveEventsBtn');
-const liveEventsBody = document.getElementById('liveEventsBody');
-const liveEventsPanel = document.getElementById('liveEventsPanel');
+const sessionSelect = document.getElementById('sessionSelect');
+const importSessionBtn = document.getElementById('importSessionBtn');
+const importSessionFile = document.getElementById('importSessionFile');
+const downloadSessionBtn = document.getElementById('downloadSessionBtn');
 
 const traceIdInput = document.getElementById('traceIdInput');
 const traceFlowSelect = document.getElementById('traceFlowSelect');
 const inspectTraceBtn = document.getElementById('inspectTraceBtn');
 const traceSummary = document.getElementById('traceSummary');
 const traceTimeline = document.getElementById('traceTimeline');
-const toggleTraceBtn = document.getElementById('toggleTraceBtn');
-const traceBody = document.getElementById('traceBody');
-const tracePanel = document.getElementById('tracePanel');
 const flowStatus = document.getElementById('flowStatus');
 const flowGraph = document.getElementById('flowGraph');
 
-const flowConfigPanel = document.getElementById('flowConfigPanel');
-const toggleConfigBtn = document.getElementById('toggleConfigBtn');
-const configBody = document.getElementById('configBody');
 const loadConfigBtn = document.getElementById('loadConfigBtn');
 const saveConfigBtn = document.getElementById('saveConfigBtn');
 const exportConfigBtn = document.getElementById('exportConfigBtn');
@@ -55,19 +50,67 @@ const flowStepsEditor = document.getElementById('flowStepsEditor');
 const configMessage = document.getElementById('configMessage');
 
 const SLOW_STEP_THRESHOLD_MS = 50;
+const MAX_EVENT_CACHE_SIZE = 2_000;
 
 let eventSource = null;
-let cachedEvents = [];
+
+let allEventsCache = [];
+let visibleEvents = [];
+
 let cachedMqttTopics = [];
 let cachedWsChannels = [];
 let selectedChannels = new Set();
 
-let liveEventsCollapsed = false;
-let traceCollapsed = false;
-let configCollapsed = false;
-
 let currentConfig = null;
 let selectedConfigFlowId = null;
+
+let currentSession = {
+    type: 'LIVE',
+    sessionId: null
+};
+
+function activateTab(targetId) {
+    document.querySelectorAll('.tab').forEach(tab => {
+        const active = tab.dataset.tab === targetId;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', String(active));
+    });
+
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.toggle('active-panel', panel.id === targetId);
+    });
+}
+
+function initTabsAndCollapse() {
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => activateTab(tab.dataset.tab));
+    });
+
+    document.querySelectorAll('.collapse-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const body = document.getElementById(btn.dataset.target);
+            const panel = document.getElementById(btn.dataset.panel);
+
+            if (!body) return;
+
+            const collapsed = body.classList.toggle('collapsed');
+
+            if (panel) {
+                panel.classList.toggle('panel-collapsed', collapsed);
+            }
+
+            const chevron = btn.querySelector('.chevron');
+            if (chevron) {
+                chevron.style.transform = collapsed ? 'rotate(-90deg)' : '';
+            }
+
+            const labelNode = [...btn.childNodes].find(node => node.nodeType === Node.TEXT_NODE);
+            if (labelNode) {
+                labelNode.textContent = collapsed ? ' Expand' : ' Collapse';
+            }
+        });
+    });
+}
 
 function setStreamStatus(state) {
     streamStatus.className = `status-badge ${state}`;
@@ -80,8 +123,8 @@ function setStreamStatus(state) {
         streamStatus.textContent = 'Disconnected';
     }
 
-    connectStreamBtn.disabled = state === 'connecting' || state === 'connected';
-    disconnectStreamBtn.disabled = state === 'disconnected';
+    connectStreamBtn.disabled = currentSession.type !== 'LIVE' || state === 'connecting' || state === 'connected';
+    disconnectStreamBtn.disabled = currentSession.type !== 'LIVE' || state === 'disconnected';
 }
 
 async function fetchJson(url, options = {}) {
@@ -94,10 +137,67 @@ async function fetchJson(url, options = {}) {
     return response.json();
 }
 
+function eventObservedAt(event) {
+    return event.observedAt || event.receivedAt || event.timestamp || null;
+}
+
+function effectiveEventTime(event) {
+    return event.sourceSentAt || eventObservedAt(event) || '';
+}
+
+function eventKey(event) {
+    return [
+        event.traceId || '',
+        event.protocol || '',
+        event.source || '',
+        event.channel || '',
+        eventObservedAt(event) || '',
+        event.sourceSentAt || '',
+        event.payload || ''
+    ].join('|');
+}
+
+function sortEventsByLogicalTime(events) {
+    return [...events].sort((a, b) => {
+        const aTime = String(effectiveEventTime(a));
+        const bTime = String(effectiveEventTime(b));
+
+        const byTime = aTime.localeCompare(bTime);
+        if (byTime !== 0) return byTime;
+
+        return eventKey(a).localeCompare(eventKey(b));
+    });
+}
+
+function mergeEvents(existing, incoming) {
+    const map = new Map();
+
+    for (const event of existing || []) {
+        map.set(eventKey(event), event);
+    }
+
+    for (const event of incoming || []) {
+        map.set(eventKey(event), event);
+    }
+
+    const merged = sortEventsByLogicalTime([...map.values()]);
+
+    if (merged.length > MAX_EVENT_CACHE_SIZE) {
+        return merged.slice(merged.length - MAX_EVENT_CACHE_SIZE);
+    }
+
+    return merged;
+}
+
+function resetEventState() {
+    allEventsCache = [];
+    visibleEvents = [];
+    eventsTableBody.innerHTML = '';
+    eventsCount.textContent = '0';
+}
+
 function updateSelectionLabel() {
-    selectedTopicLabel.textContent = selectedChannels.size === 0
-        ? 'All channels'
-        : `${selectedChannels.size} selected`;
+    selectedTopicLabel.textContent = selectedChannels.size === 0 ? 'All' : `${selectedChannels.size}`;
 }
 
 function appendRepeatedParams(params, name, values) {
@@ -106,32 +206,40 @@ function appendRepeatedParams(params, name, values) {
     }
 }
 
-function buildRecentUrl() {
-    const params = new URLSearchParams();
+function selectedTraceFlowId() {
+    const value = traceFlowSelect.value;
+    return value && value.trim() ? value.trim() : null;
+}
 
-    appendRepeatedParams(params, 'channel', Array.from(selectedChannels));
-
-    const textFilter = textFilterInput.value.trim();
-    if (textFilter) {
-        params.set('textContains', textFilter);
-    }
-
-    const query = params.toString();
-    return `/api/events/recent${query ? `?${query}` : ''}`;
+function buildLiveRecentUrl() {
+    return '/api/events/recent';
 }
 
 function buildStreamUrl() {
     const params = new URLSearchParams();
-
-    appendRepeatedParams(params, 'channel', Array.from(selectedChannels));
-
-    const textFilter = textFilterInput.value.trim();
-    if (textFilter) {
-        params.set('textContains', textFilter);
-    }
-
     params.set('_ts', String(Date.now()));
     return `/api/stream/events?${params.toString()}`;
+}
+
+function buildTraceUrl(traceId) {
+    const flowId = selectedTraceFlowId();
+    const encodedTraceId = encodeURIComponent(traceId);
+
+    if (currentSession.type === 'IMPORTED') {
+        const base = `/api/sessions/imported/${encodeURIComponent(currentSession.sessionId)}/trace/${encodedTraceId}`;
+        return flowId ? `${base}?flowId=${encodeURIComponent(flowId)}` : base;
+    }
+
+    const base = `/api/correlation/trace/${encodedTraceId}`;
+    return flowId ? `${base}?flowId=${encodeURIComponent(flowId)}` : base;
+}
+
+function buildSessionDownloadUrl() {
+    const params = new URLSearchParams();
+    appendRepeatedParams(params, 'channel', Array.from(selectedChannels));
+
+    const query = params.toString();
+    return `/api/export/session/download${query ? `?${query}` : ''}`;
 }
 
 function escapeHtml(text) {
@@ -185,36 +293,56 @@ function prettyPayload(payload) {
     }
 }
 
-function eventObservedAt(event) {
-    return event.observedAt || event.receivedAt || event.timestamp;
+function eventMatchesUiFilters(event) {
+    if (selectedChannels.size > 0 && !selectedChannels.has(event.channel)) {
+        return false;
+    }
+
+    const textFilter = textFilterInput.value.trim().toLowerCase();
+
+    if (textFilter) {
+        return String(event.payload || '').toLowerCase().includes(textFilter)
+            || String(event.channel || '').toLowerCase().includes(textFilter)
+            || String(event.traceId || '').toLowerCase().includes(textFilter)
+            || String(event.protocol || '').toLowerCase().includes(textFilter)
+            || String(event.source || '').toLowerCase().includes(textFilter);
+    }
+
+    return true;
 }
 
-function renderEvents(events) {
-    cachedEvents = events;
+function applyFiltersAndRenderEvents() {
+    visibleEvents = allEventsCache.filter(eventMatchesUiFilters);
+    renderEventsTable(visibleEvents);
+    eventsCount.textContent = String(visibleEvents.length);
+}
+
+function renderEventsTable(events) {
     eventsTableBody.innerHTML = '';
-    eventsCount.textContent = String(events.length);
 
     const ordered = [...events].reverse();
 
     for (const event of ordered) {
         const tr = document.createElement('tr');
+        const protocolClass = (event.protocol || '').toLowerCase() === 'ws' ? 'ws' : '';
+
         tr.innerHTML = `
             <td>${escapeHtml(formatTime(eventObservedAt(event)))}</td>
-            <td>${escapeHtml(event.protocol || '-')}</td>
+            <td><span class="protocol-pill ${protocolClass}">${escapeHtml(event.protocol || '-')}</span></td>
             <td>${escapeHtml(event.channel || '-')}</td>
             <td>${escapeHtml(event.traceId || '-')}</td>
             <td class="payload-preview">${escapeHtml(payloadPreview(event.payload || ''))}</td>
         `;
 
         tr.onclick = () => {
-            document.querySelectorAll('#eventsTableBody tr')
-                .forEach(row => row.classList.remove('selected-row'));
-
+            document.querySelectorAll('#eventsTableBody tr').forEach(row => row.classList.remove('selected-row'));
             tr.classList.add('selected-row');
+
             eventDetails.textContent = JSON.stringify(event, null, 2);
 
             if (event.traceId) {
                 traceIdInput.value = event.traceId;
+                activateTab('tracePanel');
                 inspectTrace();
             }
         };
@@ -229,12 +357,11 @@ function renderChannelGroup(container, items, label) {
     const allBtn = document.createElement('button');
     allBtn.className = `topic-chip ${selectedChannels.size === 0 ? 'active' : ''}`;
     allBtn.textContent = `All ${label}`;
-    allBtn.onclick = async () => {
+    allBtn.onclick = () => {
         selectedChannels.clear();
         renderAllChannels();
         updateSelectionLabel();
-        await loadRecent();
-        reconnectStreamIfConnected();
+        applyFiltersAndRenderEvents();
     };
     container.appendChild(allBtn);
 
@@ -242,7 +369,7 @@ function renderChannelGroup(container, items, label) {
         const btn = document.createElement('button');
         btn.className = `topic-chip ${selectedChannels.has(item) ? 'active' : ''}`;
         btn.textContent = item;
-        btn.onclick = async () => {
+        btn.onclick = () => {
             if (selectedChannels.has(item)) {
                 selectedChannels.delete(item);
             } else {
@@ -251,8 +378,7 @@ function renderChannelGroup(container, items, label) {
 
             renderAllChannels();
             updateSelectionLabel();
-            await loadRecent();
-            reconnectStreamIfConnected();
+            applyFiltersAndRenderEvents();
         };
         container.appendChild(btn);
     }
@@ -263,28 +389,38 @@ function renderAllChannels() {
     renderChannelGroup(wsChannelsList, cachedWsChannels, 'WS');
 }
 
-async function refreshChannels() {
-    try {
-        const [mqttTopics, wsChannels] = await Promise.all([
-            fetchJson('/api/events/mqtt/topics'),
-            fetchJson('/api/events/ws/channels')
-        ]);
+function deriveChannelsFromEvents(events) {
+    const mqtt = [];
+    const ws = [];
 
-        cachedMqttTopics = mqttTopics;
-        cachedWsChannels = wsChannels;
+    for (const event of events) {
+        if (!event.channel) continue;
 
-        topicsCount.textContent = String(mqttTopics.length);
-        renderAllChannels();
-        updateSelectionLabel();
-    } catch (e) {
-        console.error('Failed loading channels', e);
+        if ((event.protocol || '').toUpperCase() === 'WS') {
+            ws.push(event.channel);
+        } else {
+            mqtt.push(event.channel);
+        }
     }
+
+    cachedMqttTopics = [...new Set(mqtt)].sort();
+    cachedWsChannels = [...new Set(ws)].sort();
 }
 
 async function loadRecent() {
     try {
-        const events = await fetchJson(buildRecentUrl());
-        renderEvents(events);
+        if (currentSession.type === 'IMPORTED') {
+            const importedEvents = await fetchJson(`/api/sessions/imported/${encodeURIComponent(currentSession.sessionId)}/events`);
+            allEventsCache = sortEventsByLogicalTime(importedEvents);
+        } else {
+            const recentEvents = await fetchJson(buildLiveRecentUrl());
+            allEventsCache = mergeEvents(allEventsCache, recentEvents);
+        }
+
+        deriveChannelsFromEvents(allEventsCache);
+        renderAllChannels();
+        updateSelectionLabel();
+        applyFiltersAndRenderEvents();
         await loadSummary();
     } catch (e) {
         console.error('Failed loading recent events', e);
@@ -302,13 +438,17 @@ function disconnectStreamInternal() {
 }
 
 function connectStream() {
+    if (currentSession.type !== 'LIVE') {
+        disconnectStream();
+        return;
+    }
+
     disconnectStreamInternal();
 
-    const url = buildStreamUrl();
-    setStreamStatus('connecting');
-
-    const es = new EventSource(url);
+    const es = new EventSource(buildStreamUrl());
     eventSource = es;
+
+    setStreamStatus('connecting');
 
     let activated = false;
 
@@ -330,13 +470,13 @@ function connectStream() {
 
         try {
             const parsed = JSON.parse(event.data);
-            cachedEvents.push(parsed);
 
-            if (cachedEvents.length > 500) {
-                cachedEvents = cachedEvents.slice(cachedEvents.length - 500);
-            }
+            allEventsCache = mergeEvents(allEventsCache, [parsed]);
 
-            renderEvents(cachedEvents);
+            deriveChannelsFromEvents(allEventsCache);
+            renderAllChannels();
+            updateSelectionLabel();
+            applyFiltersAndRenderEvents();
         } catch (e) {
             console.error('Failed parsing SSE payload', e, event.data);
         }
@@ -363,25 +503,20 @@ function disconnectStream() {
     setStreamStatus('disconnected');
 }
 
-function reconnectStreamIfConnected() {
-    if (streamStatus.textContent === 'Connected' || streamStatus.textContent === 'Connecting') {
-        connectStream();
-    }
-}
-
 async function loadSummary() {
     try {
+        if (currentSession.type === 'IMPORTED') {
+            topicsCount.textContent = String(cachedMqttTopics.length + cachedWsChannels.length);
+            eventsCount.textContent = String(visibleEvents.length);
+            return;
+        }
+
         const summary = await fetchJson('/api/dashboard/summary');
-        topicsCount.textContent = String(summary.observedTopicCount ?? 0);
-        eventsCount.textContent = String(summary.recentEventCount ?? 0);
+        topicsCount.textContent = String(cachedMqttTopics.length + cachedWsChannels.length || summary.observedTopicCount || 0);
+        eventsCount.textContent = String(visibleEvents.length || summary.recentEventCount || 0);
     } catch (e) {
         console.error('Failed loading summary', e);
     }
-}
-
-function selectedTraceFlowId() {
-    const value = traceFlowSelect.value;
-    return value && value.trim() ? value.trim() : null;
 }
 
 async function inspectTrace() {
@@ -396,12 +531,7 @@ async function inspectTrace() {
     }
 
     try {
-        const flowId = selectedTraceFlowId();
-        const url = flowId
-            ? `/api/correlation/trace/${encodeURIComponent(traceId)}?flowId=${encodeURIComponent(flowId)}`
-            : `/api/correlation/trace/${encodeURIComponent(traceId)}`;
-
-        const trace = await fetchJson(url);
+        const trace = await fetchJson(buildTraceUrl(traceId));
         renderTrace(trace);
     } catch (e) {
         console.error('Failed loading trace', e);
@@ -422,6 +552,7 @@ function renderTrace(trace) {
             renderFlowStatus(trace.validation);
             renderFlowGraphFromValidation(trace.validation);
         } else {
+            flowStatus.classList.add('hidden');
             renderActualFlowGraph([]);
         }
 
@@ -451,13 +582,13 @@ function renderTrace(trace) {
             item.classList.add('slow-step');
         }
 
+        const protocolClass = (event.protocol || '').toLowerCase() === 'ws' ? 'ws' : '';
+
         item.innerHTML = `
             <div class="trace-index">${escapeHtml(event.index ?? '-')}</div>
             <div class="trace-content">
                 <div class="trace-title">
-                    <span class="protocol-pill ${escapeHtml((event.protocol || '').toLowerCase())}">
-                        ${escapeHtml(event.protocol || '-')}
-                    </span>
+                    <span class="protocol-pill ${protocolClass}">${escapeHtml(event.protocol || '-')}</span>
                     <strong>${escapeHtml(event.channel || '-')}</strong>
                 </div>
 
@@ -492,11 +623,11 @@ function renderFlowStatus(validation) {
         flowStatus.classList.add('flow-broken');
     }
 
-    const missingText = validation.missingChannels && validation.missingChannels.length > 0
+    const missingText = validation.missingChannels?.length
         ? `Missing: ${validation.missingChannels.join(', ')}`
         : 'No missing expected steps.';
 
-    const extraText = validation.extraChannels && validation.extraChannels.length > 0
+    const extraText = validation.extraChannels?.length
         ? `Extra observed: ${validation.extraChannels.join(', ')}`
         : '';
 
@@ -540,9 +671,7 @@ function renderFlowGraphFromValidation(validation) {
             <div class="flow-node-label">${escapeHtml(step.label || `Step ${step.index}`)}</div>
             <div class="flow-node-channel">${escapeHtml(step.channel || '-')}</div>
             <div class="flow-node-protocol">${escapeHtml(step.protocol || '-')}</div>
-            <div class="flow-node-time">
-                ${step.found ? `Δ ${formatDuration(step.deltaFromPreviousSourceMs)}` : 'Missing'}
-            </div>
+            <div class="flow-node-time">${step.found ? `Δ ${formatDuration(step.deltaFromPreviousSourceMs)}` : 'Missing'}</div>
             ${step.found ? `<div class="flow-node-observed">obs Δ ${formatDuration(step.deltaFromPreviousObservedMs)}</div>` : ''}
         `;
 
@@ -557,7 +686,7 @@ function renderFlowGraphFromValidation(validation) {
         }
     });
 
-    if (validation.extraChannels && validation.extraChannels.length > 0) {
+    if (validation.extraChannels?.length) {
         const extra = document.createElement('div');
         extra.className = 'flow-extra';
         extra.innerHTML = `
@@ -631,9 +760,7 @@ async function saveConfig() {
 
         const saved = await fetchJson('/api/investigation/config', {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(config)
         });
 
@@ -661,6 +788,7 @@ function normalizeConfig(config) {
         name: config?.name || '',
         description: config?.description || '',
         flows: Array.isArray(config?.flows) ? config.flows.map(normalizeFlow) : [],
+        scenarios: Array.isArray(config?.scenarios) ? config.scenarios : [],
         rules: {
             maxStepDurationMs: config?.rules?.maxStepDurationMs ?? 50,
             allowExtraEvents: config?.rules?.allowExtraEvents ?? true
@@ -690,13 +818,9 @@ function renderConfigEditor(config) {
 function renderConfigFlowSelector(config) {
     configFlowSelect.innerHTML = '';
 
-    if (!config.flows || config.flows.length === 0) {
+    if (!config.flows?.length) {
         selectedConfigFlowId = null;
-
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'No flows configured';
-        configFlowSelect.appendChild(option);
+        configFlowSelect.innerHTML = '<option value="">No flows configured</option>';
         return;
     }
 
@@ -715,7 +839,6 @@ function renderConfigFlowSelector(config) {
 
 function renderTraceFlowSelector(config) {
     const previous = traceFlowSelect.value;
-
     traceFlowSelect.innerHTML = '';
 
     const noValidation = document.createElement('option');
@@ -745,32 +868,26 @@ function renderSelectedFlowEditor() {
     removeFlowBtn.disabled = !hasFlow;
     addFlowStepBtn.disabled = !hasFlow;
 
-    if (!flow) {
-        return;
-    }
+    if (!flow) return;
 
     flowIdInput.value = flow.id || '';
     flowNameInput.value = flow.name || '';
     flowDescriptionInput.value = flow.description || '';
 
-    const steps = [...(flow.steps || [])]
-        .sort((a, b) => Number(a.index ?? 0) - Number(b.index ?? 0));
-
-    steps.forEach((step, idx) => {
-        flowStepsEditor.appendChild(createStepEditorRow({
-            index: idx + 1,
-            protocol: step.protocol || 'MQTT',
-            channel: step.channel || '',
-            label: step.label || ''
-        }));
-    });
+    [...(flow.steps || [])]
+        .sort((a, b) => Number(a.index ?? 0) - Number(b.index ?? 0))
+        .forEach((step, idx) => {
+            flowStepsEditor.appendChild(createStepEditorRow({
+                index: idx + 1,
+                protocol: step.protocol || 'MQTT',
+                channel: step.channel || '',
+                label: step.label || ''
+            }));
+        });
 }
 
 function selectedFlow() {
-    if (!currentConfig || !selectedConfigFlowId) {
-        return null;
-    }
-
+    if (!currentConfig || !selectedConfigFlowId) return null;
     return currentConfig.flows.find(flow => flow.id === selectedConfigFlowId) || null;
 }
 
@@ -780,16 +897,13 @@ function createStepEditorRow(step) {
 
     row.innerHTML = `
         <div class="step-index">${escapeHtml(step.index)}</div>
-
         <select class="step-protocol">
             <option value="MQTT" ${step.protocol === 'MQTT' ? 'selected' : ''}>MQTT</option>
             <option value="WS" ${step.protocol === 'WS' ? 'selected' : ''}>WS</option>
         </select>
-
         <input class="step-channel" type="text" placeholder="channel/topic" value="${escapeHtml(step.channel)}">
         <input class="step-label" type="text" placeholder="label" value="${escapeHtml(step.label)}">
-
-        <button class="secondary-button remove-step-btn">Remove</button>
+        <button class="secondary-btn remove-step-btn">Remove</button>
     `;
 
     row.querySelector('.remove-step-btn').onclick = () => {
@@ -849,10 +963,7 @@ function removeSelectedFlow() {
 
 function persistSelectedFlowEditorIntoConfig() {
     const flow = selectedFlow();
-
-    if (!flow) {
-        return;
-    }
+    if (!flow) return;
 
     const oldId = flow.id;
     const newId = flowIdInput.value.trim() || oldId || createFlowId(flowNameInput.value || 'flow');
@@ -883,6 +994,7 @@ function readConfigFromEditor() {
         name: configNameInput.value.trim(),
         description: configDescriptionInput.value.trim(),
         flows: currentConfig?.flows || [],
+        scenarios: currentConfig?.scenarios || [],
         rules: {
             maxStepDurationMs: Number(maxStepDurationInput.value || 0),
             allowExtraEvents: allowExtraEventsInput.checked
@@ -902,10 +1014,7 @@ function exportConfig() {
     persistSelectedFlowEditorIntoConfig();
 
     const config = readConfigFromEditor();
-    const blob = new Blob([JSON.stringify(config, null, 2)], {
-        type: 'application/json'
-    });
-
+    const blob = new Blob([JSON.stringify(config, null, 2)], {type: 'application/json'});
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
 
@@ -943,35 +1052,125 @@ function showConfigMessage(message, type) {
     configMessage.className = `config-message ${type || ''}`;
 }
 
-function toggleConfig() {
-    configCollapsed = !configCollapsed;
+async function loadImportedSessions() {
+    try {
+        const sessions = await fetchJson('/api/sessions/imported');
+        const previous = sessionSelect.value;
 
-    configBody.classList.toggle('collapsed', configCollapsed);
-    flowConfigPanel.classList.toggle('panel-collapsed', configCollapsed);
+        sessionSelect.innerHTML = '<option value="LIVE">Live</option>';
 
-    toggleConfigBtn.textContent = configCollapsed ? 'Expand' : 'Collapse';
+        for (const session of sessions) {
+            const option = document.createElement('option');
+            option.value = session.sessionId;
+            option.textContent = `${session.name || 'Imported Session'} (${session.eventCount})`;
+            sessionSelect.appendChild(option);
+        }
+
+        if ([...sessionSelect.options].some(option => option.value === previous)) {
+            sessionSelect.value = previous;
+        } else {
+            sessionSelect.value = currentSession.type === 'LIVE' ? 'LIVE' : currentSession.sessionId || 'LIVE';
+        }
+    } catch (e) {
+        console.error('Failed loading imported sessions', e);
+    }
 }
 
-function toggleLiveEvents() {
-    liveEventsCollapsed = !liveEventsCollapsed;
+async function importSessionFileToServer(file) {
+    if (!file) return;
 
-    liveEventsBody.classList.toggle('collapsed', liveEventsCollapsed);
-    liveEventsPanel.classList.toggle('panel-collapsed', liveEventsCollapsed);
+    const form = new FormData();
+    form.append('file', file);
 
-    toggleLiveEventsBtn.textContent = liveEventsCollapsed ? 'Expand' : 'Collapse';
+    try {
+        const summary = await fetchJson('/api/sessions/import', {
+            method: 'POST',
+            body: form
+        });
+
+        await loadImportedSessions();
+
+        currentSession = {type: 'IMPORTED', sessionId: summary.sessionId};
+        sessionSelect.value = summary.sessionId;
+
+        disconnectStream();
+        selectedChannels.clear();
+        resetEventState();
+
+        traceIdInput.value = '';
+        traceSummary.textContent = `Imported session: ${summary.investigationName || summary.sessionId}`;
+        traceTimeline.innerHTML = '';
+        flowStatus.classList.add('hidden');
+        flowGraph.classList.add('hidden');
+        eventDetails.textContent = 'Select an event to inspect details.';
+
+        await loadRecent();
+        activateTab('liveEventsPanel');
+    } catch (e) {
+        console.error('Failed importing session', e);
+        alert('Failed importing session package.');
+    }
 }
 
-function toggleTrace() {
-    traceCollapsed = !traceCollapsed;
+async function switchSessionFromSelect() {
+    const value = sessionSelect.value;
 
-    traceBody.classList.toggle('collapsed', traceCollapsed);
-    tracePanel.classList.toggle('panel-collapsed', traceCollapsed);
+    selectedChannels.clear();
+    resetEventState();
 
-    toggleTraceBtn.textContent = traceCollapsed ? 'Expand' : 'Collapse';
+    traceIdInput.value = '';
+    traceTimeline.innerHTML = '';
+    flowStatus.classList.add('hidden');
+    flowGraph.classList.add('hidden');
+    eventDetails.textContent = 'Select an event to inspect details.';
+
+    if (value === 'LIVE') {
+        currentSession = {type: 'LIVE', sessionId: null};
+        setStreamStatus('disconnected');
+        await loadRecent();
+        connectStream();
+        return;
+    }
+
+    currentSession = {type: 'IMPORTED', sessionId: value};
+    disconnectStream();
+    setStreamStatus('disconnected');
+
+    traceSummary.textContent = 'Imported session selected.';
+    await loadRecent();
+}
+
+async function downloadSession() {
+    if (currentSession.type !== 'LIVE') {
+        alert('Download currently exports the live investigation session. Switch to Live to export.');
+        return;
+    }
+
+    try {
+        const response = await fetch(buildSessionDownloadUrl());
+
+        if (!response.ok) {
+            throw new Error(`Download failed: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+
+        link.href = url;
+        link.download = 'investigation-session.zip';
+        document.body.appendChild(link);
+        link.click();
+
+        link.remove();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        console.error('Failed downloading session', e);
+        alert('Failed downloading investigation session.');
+    }
 }
 
 refreshTopicsBtn.addEventListener('click', async () => {
-    await refreshChannels();
     await loadRecent();
 });
 
@@ -979,80 +1178,37 @@ loadRecentBtn.addEventListener('click', async () => {
     await loadRecent();
 });
 
-connectStreamBtn.addEventListener('click', () => {
-    connectStream();
+connectStreamBtn.addEventListener('click', () => connectStream());
+disconnectStreamBtn.addEventListener('click', () => disconnectStream());
+
+textFilterInput.addEventListener('input', () => {
+    applyFiltersAndRenderEvents();
 });
 
-disconnectStreamBtn.addEventListener('click', () => {
-    disconnectStream();
-});
-
-textFilterInput.addEventListener('change', async () => {
-    await loadRecent();
-    reconnectStreamIfConnected();
-});
-
-inspectTraceBtn.addEventListener('click', () => {
-    inspectTrace();
-});
+inspectTraceBtn.addEventListener('click', () => inspectTrace());
 
 traceIdInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-        inspectTrace();
-    }
+    if (event.key === 'Enter') inspectTrace();
 });
 
 traceFlowSelect.addEventListener('change', () => {
-    if (traceIdInput.value.trim()) {
-        inspectTrace();
-    }
+    if (traceIdInput.value.trim()) inspectTrace();
 });
 
-toggleLiveEventsBtn.addEventListener('click', () => {
-    toggleLiveEvents();
-});
+loadConfigBtn.addEventListener('click', () => loadConfig());
+saveConfigBtn.addEventListener('click', () => saveConfig());
+exportConfigBtn.addEventListener('click', () => exportConfig());
 
-toggleTraceBtn.addEventListener('click', () => {
-    toggleTrace();
-});
-
-toggleConfigBtn.addEventListener('click', () => {
-    toggleConfig();
-});
-
-loadConfigBtn.addEventListener('click', () => {
-    loadConfig();
-});
-
-saveConfigBtn.addEventListener('click', () => {
-    saveConfig();
-});
-
-exportConfigBtn.addEventListener('click', () => {
-    exportConfig();
-});
-
-importConfigBtn.addEventListener('click', () => {
-    importConfigFile.click();
-});
+importConfigBtn.addEventListener('click', () => importConfigFile.click());
 
 importConfigFile.addEventListener('change', event => {
     const file = event.target.files?.[0];
-
-    if (file) {
-        importConfigFromFile(file);
-    }
-
+    if (file) importConfigFromFile(file);
     importConfigFile.value = '';
 });
 
-addFlowBtn.addEventListener('click', () => {
-    addFlow();
-});
-
-removeFlowBtn.addEventListener('click', () => {
-    removeSelectedFlow();
-});
+addFlowBtn.addEventListener('click', () => addFlow());
+removeFlowBtn.addEventListener('click', () => removeSelectedFlow());
 
 configFlowSelect.addEventListener('change', () => {
     persistSelectedFlowEditorIntoConfig();
@@ -1060,15 +1216,30 @@ configFlowSelect.addEventListener('change', () => {
     renderSelectedFlowEditor();
 });
 
-addFlowStepBtn.addEventListener('click', () => {
-    addFlowStep();
+addFlowStepBtn.addEventListener('click', () => addFlowStep());
+
+sessionSelect.addEventListener('change', () => switchSessionFromSelect());
+
+importSessionBtn.addEventListener('click', () => importSessionFile.click());
+
+importSessionFile.addEventListener('change', event => {
+    const file = event.target.files?.[0];
+    if (file) importSessionFileToServer(file);
+    importSessionFile.value = '';
 });
 
+downloadSessionBtn.addEventListener('click', () => downloadSession());
+
 (async function init() {
+    initTabsAndCollapse();
+    activateTab('liveEventsPanel');
+
     setStreamStatus('disconnected');
-    await refreshChannels();
+
+    await loadImportedSessions();
     await loadRecent();
     await loadSummary();
     await loadConfig();
+
     connectStream();
 })();

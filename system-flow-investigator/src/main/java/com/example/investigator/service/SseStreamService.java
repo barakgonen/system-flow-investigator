@@ -2,6 +2,7 @@ package com.example.investigator.service;
 
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.stream.EventHub;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
@@ -13,6 +14,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
+@Slf4j
 public class SseStreamService {
 
     private final EventHub eventHub;
@@ -30,7 +32,7 @@ public class SseStreamService {
         SseEmitter emitter = new SseEmitter(0L);
         AtomicBoolean closed = new AtomicBoolean(false);
 
-        Disposable subscription = eventHub.stream()
+        Disposable subscription = eventHub.events()
                 .filter(event -> channels == null || channels.isEmpty() || channels.contains(event.channel()))
                 .filter(event -> textContains == null || textContains.isBlank() || safe(event.payload()).contains(textContains))
                 .filter(event -> traceId == null || traceId.isBlank() || traceId.equals(event.traceId()))
@@ -76,6 +78,7 @@ public class SseStreamService {
             emitter.send(SseEmitter.event()
                     .name("message")
                     .data(event));
+            log.info("Sent SSE event protocol={}, traceId={}", event.protocol(), event.traceId());
         } catch (IOException | IllegalStateException e) {
             closeEmitter(emitter, closed);
         }

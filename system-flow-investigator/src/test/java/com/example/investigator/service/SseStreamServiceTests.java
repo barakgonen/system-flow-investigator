@@ -44,7 +44,7 @@ public class SseStreamServiceTests {
 
     // Call this in tests that use openStream
     private SseEmitter openStream(Set<String> channels, String textContains, String traceId) {
-        when(eventHub.stream()).thenReturn(sink.asFlux());
+        when(eventHub.events()).thenReturn(sink.asFlux());
         return service.openStream(channels, textContains, traceId);
     }
 

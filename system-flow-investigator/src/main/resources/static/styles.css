@@ -1198,3 +1198,66 @@ tbody tr.selected-row {
         padding: 10px 14px;
     }
 }
+
+/* ═══════════════════════════════════════════════════
+   Phase 6D — Session Selector / Import / Download
+   ═══════════════════════════════════════════════════ */
+
+.tab-panel {
+    display: none !important;
+}
+
+.tab-panel.active-panel {
+    display: flex !important;
+    flex-direction: column;
+    flex: 1;
+}
+
+.session-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+}
+
+.session-label {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+.session-select {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    min-width: 170px;
+    max-width: 280px;
+}
+
+#importSessionBtn,
+#downloadSessionBtn {
+    white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+    .session-control {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .session-select {
+        flex: 1;
+        max-width: none;
+    }
+
+    #importSessionBtn,
+    #downloadSessionBtn {
+        width: 100%;
+    }
+}
