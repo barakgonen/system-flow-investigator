@@ -1,0 +1,5 @@
+@traceId = 4525d2da-c7e4-406d-a4a5-8a7ce54ba015
+
+### Export by traceId
+GET http://localhost:8080/api/export/events?traceId={{traceId}}
+Accept: application/x-ndjson

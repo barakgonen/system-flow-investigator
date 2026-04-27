@@ -1,0 +1,3 @@
+### Download by protocol
+GET http://localhost:8080/api/export/events/download
+Accept: application/x-ndjson
