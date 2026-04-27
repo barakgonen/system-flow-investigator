@@ -1,0 +1,13 @@
+### Ingest HTTP event
+POST http://localhost:8080/api/ingestion/http/events
+Content-Type: application/json
+
+{
+  "protocol": "HTTP",
+  "source": "manual",
+  "channel": "http/test/input",
+  "payload": "{\"traceId\":\"trace-http-1\",\"timestamp\":\"2026-04-27T12:00:00Z\",\"message\":\"hello from http ingestion\"}",
+  "metadata": {
+    "origin": "intellij-http-client"
+  }
+}

@@ -4,7 +4,6 @@ import com.example.investigator.domain.ConnectWebSocketRequest;
 import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeWebSocketRequest;
 import com.example.investigator.ingestion.ObservedEventPublisher;
-import com.example.investigator.ingestion.infra.ObservedEventPipeline;
 import com.example.investigator.service.SourceTimestampExtractor;
 import com.example.investigator.service.TraceIdExtractor;
 import org.junit.jupiter.api.BeforeEach;
