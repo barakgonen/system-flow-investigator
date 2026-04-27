@@ -1,0 +1,10 @@
+### Import session package
+POST http://localhost:8080/api/sessions/import
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="investigation-session.zip"
+Content-Type: application/zip
+
+< ./investigation-session.zip
+--boundary--

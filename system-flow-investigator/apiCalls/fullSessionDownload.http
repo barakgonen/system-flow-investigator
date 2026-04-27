@@ -1,0 +1,3 @@
+### Download full investigation session
+GET http://localhost:8080/api/export/session/download
+Accept: application/zip
