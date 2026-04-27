@@ -2,7 +2,7 @@ package com.example.investigator.service;
 
 import com.example.investigator.domain.*;
 import com.example.investigator.ingestion.mqtt.MqttObserver;
-import com.example.investigator.ingestion.websocket.WebSocketObserver;
+import com.example.investigator.ingestion.ws.WebSocketObserver;
 import com.example.investigator.storage.RecentEventStore;
 import com.example.investigator.stream.EventHub;
 import org.junit.jupiter.api.BeforeEach;

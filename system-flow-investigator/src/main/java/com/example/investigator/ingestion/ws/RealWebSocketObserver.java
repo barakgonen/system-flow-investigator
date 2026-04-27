@@ -1,4 +1,4 @@
-package com.example.investigator.ingestion.websocket;
+package com.example.investigator.ingestion.ws;
 
 import com.example.investigator.domain.ConnectWebSocketRequest;
 import com.example.investigator.domain.ObservedEvent;

@@ -1,4 +1,4 @@
-package com.example.investigator.ingestion.websocket;
+package com.example.investigator.ingestion.ws;
 
 import com.example.investigator.domain.ConnectWebSocketRequest;
 import com.example.investigator.domain.ObservedEvent;
@@ -9,17 +9,20 @@ import com.example.investigator.service.TraceIdExtractor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.web.socket.*;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketHandler;
+import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.WebSocketClient;
 
+import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-class RealWebSocketObserverConnectTests {
+class RealWebSocketObserverTests {
 
     private ObservedEventPipeline pipeline;
     private TraceIdExtractor traceIdExtractor;
@@ -35,7 +38,6 @@ class RealWebSocketObserverConnectTests {
         pipeline = mock(ObservedEventPipeline.class);
         traceIdExtractor = mock(TraceIdExtractor.class);
         sourceTimestampExtractor = mock(SourceTimestampExtractor.class);
-
         webSocketClientFactory = mock(WebSocketClientFactory.class);
         webSocketClient = mock(WebSocketClient.class);
         session = mock(WebSocketSession.class);
@@ -80,20 +82,38 @@ class RealWebSocketObserverConnectTests {
     }
 
     @Test
-    void shouldStoreSessionAfterConnectionEstablished() throws Exception {
+    void shouldReturnSourceTypeWs() {
+        assertThat(observer.sourceType()).isEqualTo("WS");
+    }
+
+    @Test
+    void shouldRegisterObservedChannelOnSubscribe() {
+        observer.subscribe(new SubscribeWebSocketRequest(
+                "lab-ws",
+                "ws/live/out",
+                false
+        ));
+
+        assertThat(observer.observedChannels())
+                .contains("ws/live/out");
+    }
+
+    @Test
+    void shouldStoreSessionAfterConnectionEstablished() {
         WebSocketHandler handler = observer.createHandler(new ConnectWebSocketRequest(
                 "lab-ws",
                 "ws://localhost:8090/ws/live"
         ));
 
-        handler.afterConnectionEstablished(session);
-
-        assertThat(observer.observedChannels()).isEmpty();
+        assertThatCode(() -> handler.afterConnectionEstablished(session))
+                .doesNotThrowAnyException();
     }
 
     @Test
     void shouldConvertTextMessageToObservedEvent() throws Exception {
         when(traceIdExtractor.extract(anyString())).thenReturn("trace-123");
+        when(sourceTimestampExtractor.extract(anyString()))
+                .thenReturn(Instant.parse("2026-04-24T10:15:30Z"));
 
         observer.subscribe(new SubscribeWebSocketRequest(
                 "lab-ws",
@@ -110,6 +130,7 @@ class RealWebSocketObserverConnectTests {
                 {
                   "channel": "ws/live/out",
                   "traceId": "trace-123",
+                  "timestamp": "2026-04-24T10:15:30Z",
                   "message": "hello"
                 }
                 """));
@@ -120,15 +141,19 @@ class RealWebSocketObserverConnectTests {
         ObservedEvent event = eventCaptor.getValue();
 
         assertThat(event.protocol()).isEqualTo("WS");
+        assertThat(event.source()).isEqualTo("lab-ws");
         assertThat(event.channel()).isEqualTo("ws/live/out");
         assertThat(event.traceId()).isEqualTo("trace-123");
         assertThat(event.payload()).contains("hello");
+        assertThat(event.sourceSentAt()).isEqualTo(Instant.parse("2026-04-24T10:15:30Z"));
+        assertThat(event.observedAt()).isNotNull();
         assertThat(observer.observedChannels()).contains("ws/live/out");
     }
 
     @Test
     void shouldPersistTextMessageWhenChannelPersistenceEnabled() throws Exception {
         when(traceIdExtractor.extract(anyString())).thenReturn("trace-123");
+        when(sourceTimestampExtractor.extract(anyString())).thenReturn(null);
 
         observer.subscribe(new SubscribeWebSocketRequest(
                 "lab-ws",
@@ -152,8 +177,35 @@ class RealWebSocketObserverConnectTests {
     }
 
     @Test
+    void shouldNotPersistTextMessageWhenChannelPersistenceDisabled() throws Exception {
+        when(traceIdExtractor.extract(anyString())).thenReturn("trace-123");
+        when(sourceTimestampExtractor.extract(anyString())).thenReturn(null);
+
+        observer.subscribe(new SubscribeWebSocketRequest(
+                "lab-ws",
+                "ws/live/out",
+                false
+        ));
+
+        WebSocketHandler handler = observer.createHandler(new ConnectWebSocketRequest(
+                "lab-ws",
+                "ws://localhost:8090/ws/live"
+        ));
+
+        handler.handleMessage(session, new TextMessage("""
+                {
+                  "channel": "ws/live/out",
+                  "traceId": "trace-123"
+                }
+                """));
+
+        verify(pipeline).accept(any(ObservedEvent.class), eq(false));
+    }
+
+    @Test
     void shouldUseFallbackChannelWhenPayloadHasNoChannel() throws Exception {
         when(traceIdExtractor.extract(anyString())).thenReturn("trace-123");
+        when(sourceTimestampExtractor.extract(anyString())).thenReturn(null);
 
         WebSocketHandler handler = observer.createHandler(new ConnectWebSocketRequest(
                 "lab-ws",
@@ -169,31 +221,59 @@ class RealWebSocketObserverConnectTests {
         ArgumentCaptor<ObservedEvent> eventCaptor = ArgumentCaptor.forClass(ObservedEvent.class);
         verify(pipeline).accept(eventCaptor.capture(), eq(false));
 
-        assertThat(eventCaptor.getValue().channel()).isEqualTo("WS::lab-ws");
+        ObservedEvent event = eventCaptor.getValue();
+
+        assertThat(event.channel()).isEqualTo("WS::lab-ws");
+        assertThat(event.traceId()).isEqualTo("trace-123");
+        assertThat(event.sourceSentAt()).isNull();
+        assertThat(observer.observedChannels()).contains("WS::lab-ws");
     }
 
     @Test
-    void shouldHandleConnectionClosedWithoutFailure() throws Exception {
+    void shouldUseFallbackChannelWhenPayloadIsInvalidJson() throws Exception {
+        when(traceIdExtractor.extract(anyString())).thenReturn(null);
+        when(sourceTimestampExtractor.extract(anyString())).thenReturn(null);
+
         WebSocketHandler handler = observer.createHandler(new ConnectWebSocketRequest(
                 "lab-ws",
                 "ws://localhost:8090/ws/live"
         ));
 
-        handler.afterConnectionEstablished(session);
-        handler.afterConnectionClosed(session, CloseStatus.NORMAL);
+        handler.handleMessage(session, new TextMessage("not-json"));
 
-        // no exception = pass
+        ArgumentCaptor<ObservedEvent> eventCaptor = ArgumentCaptor.forClass(ObservedEvent.class);
+        verify(pipeline).accept(eventCaptor.capture(), eq(false));
+
+        ObservedEvent event = eventCaptor.getValue();
+
+        assertThat(event.channel()).isEqualTo("WS::lab-ws");
+        assertThat(event.payload()).isEqualTo("not-json");
+        assertThat(event.traceId()).isNull();
+        assertThat(event.sourceSentAt()).isNull();
     }
 
     @Test
-    void shouldHandleTransportErrorWithoutFailure() throws Exception {
+    void shouldHandleConnectionClosedWithoutFailure() {
         WebSocketHandler handler = observer.createHandler(new ConnectWebSocketRequest(
                 "lab-ws",
                 "ws://localhost:8090/ws/live"
         ));
 
-        handler.handleTransportError(session, new RuntimeException("network error"));
+        assertThatCode(() -> {
+            handler.afterConnectionEstablished(session);
+            handler.afterConnectionClosed(session, CloseStatus.NORMAL);
+        }).doesNotThrowAnyException();
+    }
 
-        // no exception = pass
+    @Test
+    void shouldHandleTransportErrorWithoutFailure() {
+        WebSocketHandler handler = observer.createHandler(new ConnectWebSocketRequest(
+                "lab-ws",
+                "ws://localhost:8090/ws/live"
+        ));
+
+        assertThatCode(() ->
+                handler.handleTransportError(session, new RuntimeException("network error"))
+        ).doesNotThrowAnyException();
     }
 }

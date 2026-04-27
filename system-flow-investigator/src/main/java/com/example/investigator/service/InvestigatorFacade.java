@@ -7,7 +7,7 @@ import com.example.investigator.domain.ObservedEvent;
 import com.example.investigator.domain.SubscribeMqttRequest;
 import com.example.investigator.domain.SubscribeWebSocketRequest;
 import com.example.investigator.ingestion.mqtt.MqttObserver;
-import com.example.investigator.ingestion.websocket.WebSocketObserver;
+import com.example.investigator.ingestion.ws.WebSocketObserver;
 import com.example.investigator.storage.RecentEventStore;
 import com.example.investigator.stream.EventHub;
 import org.springframework.stereotype.Service;

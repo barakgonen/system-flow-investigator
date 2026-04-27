@@ -1,4 +1,4 @@
-package com.example.investigator.ingestion.websocket;
+package com.example.investigator.ingestion.ws;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.client.WebSocketClient;
